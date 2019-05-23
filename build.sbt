@@ -11,6 +11,7 @@ lazy val microservice = Project(appName, file("."))
     libraryDependencies              ++= AppDependencies.compile ++ AppDependencies.test
   )
   .settings(publishingSettings: _*)
+  .settings(PlayKeys.devSettings += "play.server.http.idleTimeout" -> "900 seconds")
   .configs(IntegrationTest)
   .settings(integrationTestSettings(): _*)
   .settings(resolvers += Resolver.jcenterRepo)
