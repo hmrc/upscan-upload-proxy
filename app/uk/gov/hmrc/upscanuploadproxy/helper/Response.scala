@@ -19,6 +19,9 @@ import play.api.libs.json.Json
 import play.api.mvc.{Result, Results}
 import uk.gov.hmrc.upscanuploadproxy.model.ErrorResponse
 
+import scala.util.Try
+import scala.xml.Elem
+
 object Response {
 
   def badRequest(message: String): Result =
@@ -29,5 +32,29 @@ object Response {
 
   def internalServerError(message: String): Result =
     Results.InternalServerError(Json.toJson(ErrorResponse(message))(ErrorResponse.writes))
+
+  private def getErrorParameter(elemType: String, xml: Elem): Option[String] =
+    (xml \ elemType).headOption.map(node => s"error$elemType=${node.text}")
+
+  private def errorParamsList(body: String): List[String] =
+    Try(scala.xml.XML.loadString(body)).toOption.toList.flatMap { xml =>
+      val requestId = getErrorParameter("RequestId", xml)
+      val resource  = getErrorParameter("Resource", xml)
+      val message   = getErrorParameter("Message", xml)
+      val code      = getErrorParameter("Code", xml)
+
+      List(code, message, resource, requestId).flatten
+    }
+
+  def redirect(url: String, body: String): Result = {
+    val errors = errorParamsList(body)
+    val queryParams = if (errors.nonEmpty) {
+      errors.mkString("?", "&", "")
+    } else {
+      ""
+    }
+
+    Results.Redirect(s"$url$queryParams", 303)
+  }
 
 }
