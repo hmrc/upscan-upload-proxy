@@ -1,0 +1,22 @@
+----------------------------946347039423050176633444
+Content-Disposition: form-data; name="acl"
+
+public-read-write
+----------------------------946347039423050176633444
+Content-Disposition: form-data; name="Content-Type"
+
+application/text
+----------------------------946347039423050176633444
+Content-Disposition: form-data; name="key"
+
+helloworld.txt
+----------------------------946347039423050176633444
+Content-Disposition: form-data; name="error_action_redirect"
+
+https://www.amazon.co.uk
+----------------------------946347039423050176633444
+Content-Disposition: form-data; name="file"; filename="helloworld.txt"
+Content-Type: text/plain
+
+Hello World!
+----------------------------946347039423050176633444--
