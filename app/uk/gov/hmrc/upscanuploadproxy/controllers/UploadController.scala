@@ -16,15 +16,18 @@
 
 package uk.gov.hmrc.upscanuploadproxy.controllers
 
-import akka.stream.scaladsl.{FileIO, Source}
+import akka.stream.scaladsl.{FileIO, Sink}
 import cats.data.EitherT
 import cats.implicits._
 import javax.inject.{Inject, Singleton}
-import play.api.libs.Files
-import play.api.mvc.MultipartFormData.DataPart
+import play.api.libs.streams.Accumulator
+import play.api.mvc.MultipartFormData.FilePart
 import play.api.mvc._
+import play.core.parsers.Multipart
+import play.core.parsers.Multipart.FileInfo
 import uk.gov.hmrc.upscanuploadproxy.UploadUriGenerator
-import uk.gov.hmrc.upscanuploadproxy.helper.Response
+import uk.gov.hmrc.upscanuploadproxy.helpers.Response
+import uk.gov.hmrc.upscanuploadproxy.parsers.CompositeBodyParser
 import uk.gov.hmrc.upscanuploadproxy.services.ProxyService
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -36,32 +39,30 @@ class UploadController @Inject()(uriGenerator: UploadUriGenerator, proxyService:
 
   private val missingRedirectUrl = Response.badRequest("Could not find error_action_redirect field in request")
 
-  private def getBodyParts(bodyParts: Map[String, Seq[String]]): List[DataPart] =
-    (for {
-      (name, values) <- bodyParts
-      value          <- values
-    } yield MultipartFormData.DataPart(name, value)).toList
+  private val compositeBodyParser = CompositeBodyParser(parse.raw, parse.multipartFormData(fileIgnoreHandler()))
 
-  private def getFileParts(files: Seq[MultipartFormData.FilePart[Files.TemporaryFile]]) =
-    files.map(filePart => filePart.copy(ref = FileIO.fromPath(filePart.ref.path)))
+  private def getRequiredHeaders(headers: Seq[(String, String)]): Seq[(String, String)] = headers.filter {
+    case (header, _) => header.equalsIgnoreCase("content-type") || header.equalsIgnoreCase("content-length")
+  }
 
-  def upload(destination: String): Action[MultipartFormData[Files.TemporaryFile]] =
-    Action.async(parse.multipartFormData) { implicit request =>
-      val url         = uriGenerator.uri(destination)
-      val body        = request.body
-      val redirectUrl = body.dataParts.get("error_action_redirect").map(_.head)
+  private def fileIgnoreHandler(): Multipart.FilePartHandler[Unit] = {
+    case FileInfo(partName, filename, contentType) =>
+      Accumulator(Sink.ignore).mapFuture(_ => Future.successful(FilePart(partName, filename, contentType, ())))
+  }
 
-      val result = for {
+  def upload(destination: String): Action[(RawBuffer, MultipartFormData[Unit])] =
+    Action.async(compositeBodyParser) { implicit request =>
+      val url              = uriGenerator.uri(destination)
+      val (raw, multipart) = request.body
+      val headers          = request.headers.headers
+      val redirectUrl      = multipart.dataParts.get("error_action_redirect").map(_.head)
+
+      (for {
         redirectUrl <- EitherT.fromEither[Future](redirectUrl.toRight(missingRedirectUrl))
-        dataParts     = getBodyParts(body.dataParts)
-        fileParts     = getFileParts(body.files)
-        contentLength = request.headers.get("content-length").map(length => "Content-Length" -> length).toList
         response <- proxyService
-                     .post(url, Source(dataParts ++ fileParts), contentLength)
+                     .post(url, FileIO.fromPath(raw.asFile.toPath), getRequiredHeaders(headers))
                      .leftMap(Response.redirect(redirectUrl, _))
 
-      } yield response
-
-      result.merge
+      } yield response).merge
     }
 }
