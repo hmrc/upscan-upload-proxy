@@ -27,6 +27,9 @@ import uk.gov.hmrc.upscanuploadproxy.parsers.RawAndMultipartBodyParser
 import uk.gov.hmrc.upscanuploadproxy.services.ProxyService
 
 import scala.concurrent.{ExecutionContext, Future}
+import akka.stream.scaladsl.Source
+import play.api.libs.streams.Accumulator
+import akka.util.ByteString
 
 @Singleton()
 class UploadController @Inject()(uriGenerator: UploadUriGenerator, proxyService: ProxyService, cc: ControllerComponents)(
@@ -39,19 +42,27 @@ class UploadController @Inject()(uriGenerator: UploadUriGenerator, proxyService:
     case (header, _) => header.equalsIgnoreCase("content-type") || header.equalsIgnoreCase("content-length")
   }
 
-  def upload(destination: String): Action[(RawBuffer, MultipartFormData[Unit])] =
-    Action.async(RawAndMultipartBodyParser(parse.raw, parse.multipartFormData(_))) { implicit request =>
+  def upload(destination: String): Action[(Source[ByteString, _], MultipartFormData[Unit])] =
+    Action.async(RawAndMultipartBodyParser(rawParser, parse.multipartFormData(_))) { implicit request =>
       val url              = uriGenerator.uri(destination)
       val (raw, multipart) = request.body
       val headers          = request.headers.headers
       val redirectUrl      = multipart.dataParts.get("error_action_redirect").map(_.head)
 
       (for {
-        redirectUrl <- EitherT.fromEither[Future](redirectUrl.toRight(missingRedirectUrl))
-        response <- proxyService
-                     .post(url, FileIO.fromPath(raw.asFile.toPath), getRequiredHeaders(headers))
-                     .leftMap(Response.redirect(redirectUrl, _))
-
-      } yield response).merge
+         redirectUrl <- EitherT.fromEither[Future](redirectUrl.toRight(missingRedirectUrl))
+         response    <- proxyService
+                          .post(url, raw, getRequiredHeaders(headers))
+                          .leftMap(Response.redirect(redirectUrl, _))
+       } yield response
+      ).merge
     }
+
+  // alternative to parser.raw which doesn't write to memory/disk, but allows streaming straight to a sink
+  def rawParser: BodyParser[Source[ByteString, _]] =
+    BodyParser("rawParser") { _ =>
+      Accumulator
+        .source[ByteString]
+	      .map(Right.apply)
+  }
 }

@@ -29,27 +29,26 @@ import play.core.parsers.Multipart.FileInfo
 
 import scala.concurrent.{ExecutionContext, Future}
 
-case class RawAndMultipartBodyParser(
-  rawParser: BodyParser[RawBuffer],
+case class RawAndMultipartBodyParser[Raw](
+  rawParser: BodyParser[Raw],
   multipartParser: Multipart.FilePartHandler[Unit] => BodyParser[MultipartFormData[Unit]]
 )(implicit ec: ExecutionContext)
-    extends BodyParser[(RawBuffer, MultipartFormData[Unit])] {
+    extends BodyParser[(Raw, MultipartFormData[Unit])] {
 
   private def fileIgnoreHandler(): Multipart.FilePartHandler[Unit] = {
     case FileInfo(partName, filename, contentType) =>
       Accumulator(Sink.ignore).mapFuture(_ => Future.successful(FilePart(partName, filename, contentType, ())))
   }
 
-  private def combine[L, T1, T2](f1: Future[Either[L, T1]], f2: Future[Either[L, T2]]): Future[Either[L, (T1, T2)]] = {
-    val result = for {
-      o1 <- EitherT(f1)
-      o2 <- EitherT(f2)
-    } yield (o1, o2)
-    result.value
-  }
+  private def combine[L, T1, T2](f1: Future[Either[L, T1]], f2: Future[Either[L, T2]]): Future[Either[L, (T1, T2)]] =
+    (for {
+       o1 <- EitherT(f1)
+       o2 <- EitherT(f2)
+     } yield (o1, o2)
+    ).value
 
   type Acc[T] = Accumulator[ByteString, Either[Result, T]]
-  override def apply(requestHeader: RequestHeader): Acc[(RawBuffer, MultipartFormData[Unit])] = {
+  override def apply(requestHeader: RequestHeader): Acc[(Raw, MultipartFormData[Unit])] = {
     val rawAccumulator       = rawParser(requestHeader)
     val multipartAccumulator = multipartParser(fileIgnoreHandler())(requestHeader)
     val combinedSink = Sink.fromGraph(GraphDSL.create(rawAccumulator.toSink, multipartAccumulator.toSink)(combine) {
