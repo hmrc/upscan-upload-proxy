@@ -16,20 +16,20 @@
 
 package uk.gov.hmrc.upscanuploadproxy.controllers
 
-import akka.stream.scaladsl.FileIO
+import akka.stream.scaladsl.{Sink, Source}
+import akka.util.ByteString
 import cats.data.EitherT
 import cats.implicits._
 import javax.inject.{Inject, Singleton}
-import play.api.mvc._
+import play.api.mvc.{AbstractController, Action, BodyParser, ControllerComponents, MultipartFormData}
+import play.core.parsers.Multipart
+import play.api.libs.streams.Accumulator
 import uk.gov.hmrc.upscanuploadproxy.UploadUriGenerator
 import uk.gov.hmrc.upscanuploadproxy.helpers.Response
-import uk.gov.hmrc.upscanuploadproxy.parsers.RawAndMultipartBodyParser
+import uk.gov.hmrc.upscanuploadproxy.parsers.SplitBodyParser
 import uk.gov.hmrc.upscanuploadproxy.services.ProxyService
 
 import scala.concurrent.{ExecutionContext, Future}
-import akka.stream.scaladsl.Source
-import play.api.libs.streams.Accumulator
-import akka.util.ByteString
 
 @Singleton()
 class UploadController @Inject()(uriGenerator: UploadUriGenerator, proxyService: ProxyService, cc: ControllerComponents)(
@@ -42,8 +42,9 @@ class UploadController @Inject()(uriGenerator: UploadUriGenerator, proxyService:
     case (header, _) => header.equalsIgnoreCase("content-type") || header.equalsIgnoreCase("content-length")
   }
 
+
   def upload(destination: String): Action[(Source[ByteString, _], MultipartFormData[Unit])] =
-    Action.async(RawAndMultipartBodyParser(rawParser, parse.multipartFormData(_))) { implicit request =>
+    Action.async(SplitBodyParser(rawParser, parse.multipartFormData(fileIgnoreHandler))) { implicit request =>
       val url              = uriGenerator.uri(destination)
       val (raw, multipart) = request.body
       val headers          = request.headers.headers
@@ -59,10 +60,16 @@ class UploadController @Inject()(uriGenerator: UploadUriGenerator, proxyService:
     }
 
   // alternative to parser.raw which doesn't write to memory/disk, but allows streaming straight to a sink
-  def rawParser: BodyParser[Source[ByteString, _]] =
+  private def rawParser: BodyParser[Source[ByteString, _]] =
     BodyParser("rawParser") { _ =>
       Accumulator
         .source[ByteString]
 	      .map(Right.apply)
+  }
+
+  // skip file parts
+  private def fileIgnoreHandler: Multipart.FilePartHandler[Unit] = {
+    case Multipart.FileInfo(partName, filename, contentType) =>
+      Accumulator(Sink.ignore).mapFuture(_ => Future.successful(MultipartFormData.FilePart(partName, filename, contentType, ())))
   }
 }
