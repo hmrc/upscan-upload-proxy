@@ -19,7 +19,7 @@ import play.api._
 import play.api.http.DefaultHttpErrorHandler
 import play.api.mvc._
 import play.api.routing.Router
-import uk.gov.hmrc.upscanuploadproxy.helper.Response
+import uk.gov.hmrc.upscanuploadproxy.helpers.Response
 
 import scala.concurrent._
 

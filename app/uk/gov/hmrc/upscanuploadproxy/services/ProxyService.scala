@@ -25,7 +25,7 @@ import javax.inject.Inject
 import org.slf4j.LoggerFactory
 import play.api.http.Status
 import play.api.libs.ws.WSClient
-import play.api.mvc.{MultipartFormData, Result, Results}
+import play.api.mvc.{Result, Results}
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
@@ -40,18 +40,19 @@ class ProxyService @Inject()(wsClient: WSClient)(implicit m: Materializer) {
   type FailureResponse = String
   def post(
     url: String,
-    source: Source[MultipartFormData.Part[Source[ByteString, _]], _],
-    headers: Seq[(String, String)]
-  ): EitherT[Future, FailureResponse, SuccessResponse] = {
+    source: Source[ByteString, _],
+    headers: Seq[(String, String)]): EitherT[Future, FailureResponse, SuccessResponse] = {
 
     logger.info(s"Url :$url}")
 
     val response = wsClient
       .url(url)
-      .withRequestTimeout(Duration.Inf)
+      .withMethod("POST")
       .withFollowRedirects(false)
       .withHttpHeaders(headers: _*)
-      .post(source)
+      .withBody(source)
+      .withRequestTimeout(Duration.Inf)
+      .execute("POST")
 
     EitherT(response.map { r =>
       val headers = r.headers.toList.flatMap { case (h, v) => v.map((h, _)) }

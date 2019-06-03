@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package uk.gov.hmrc.upscanuploadproxy.helper
+package uk.gov.hmrc.upscanuploadproxy.helpers
 import play.api.libs.json.Json
 import play.api.mvc.{Result, Results}
 import uk.gov.hmrc.upscanuploadproxy.model.ErrorResponse
