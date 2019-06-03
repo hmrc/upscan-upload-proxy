@@ -58,10 +58,10 @@ object SplitBodyParser {
       , sink2: Sink[ByteString, Future[Either[Result, T2]]]
       )(implicit ec: ExecutionContext): Sink[ByteString, Future[Either[Result, (T1, T2)]]] =
     Sink.fromGraph(GraphDSL.create(sink1, sink2)(combine) {
-      implicit builder => (sink1, sink2) =>
+      implicit builder => (s1, s2) =>
         val broadcast = builder.add(Broadcast[ByteString](outputPorts = 2))
-        broadcast.out(0) ~> sink1
-        broadcast.out(1) ~> sink2
+        broadcast.out(0) ~> s1
+        broadcast.out(1) ~> s2
         SinkShape(broadcast.in)
     })
 }

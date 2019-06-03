@@ -26,11 +26,11 @@ Content-Length	xxx
 ### Body
 ```$xslt
 error_action_redirect	https://www...
-``` 
+```
 
 S3 allows a redirect url to be specified for successful file upload via a `success_action_redirect` form field.
- 
-This service enriches the S3 api to allow a redirect url to be specified for a failed file upload via a 
+
+This service enriches the S3 api to allow a redirect url to be specified for a failed file upload via a
 `error_action_redirect` form field.
 
 
@@ -109,3 +109,7 @@ curl -X POST \
   -F key=helloworld.txt \
   -F file=@HelloWorld.txt
 ```
+
+
+
+curl -X POST  http://localhost:9000/v1/uploads/magna-test  -H 'content-type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW'  -F acl=public-read-write  -F Content-Type=application/text  -F key=colinssource.txt  -F error_action_redirect=https://www.amazon.co.uk  -F file=@/home/colin/Downloads/MDTP\ architecture\ overview\ Jan\ 2018.mp4
