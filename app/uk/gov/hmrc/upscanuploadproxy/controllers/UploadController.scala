@@ -16,7 +16,7 @@
 
 package uk.gov.hmrc.upscanuploadproxy.controllers
 
-import akka.stream.scaladsl.{Sink, Source}
+import akka.stream.scaladsl.{Flow, Framing, Sink, Source}
 import akka.util.ByteString
 import cats.data.EitherT
 import cats.implicits._
@@ -26,26 +26,20 @@ import play.core.parsers.Multipart
 import play.api.libs.streams.Accumulator
 import uk.gov.hmrc.upscanuploadproxy.UploadUriGenerator
 import uk.gov.hmrc.upscanuploadproxy.helpers.Response
-import uk.gov.hmrc.upscanuploadproxy.parsers.SplitBodyParser
+import uk.gov.hmrc.upscanuploadproxy.parsers.CompositeBodyParser
 import uk.gov.hmrc.upscanuploadproxy.services.ProxyService
 
 import scala.concurrent.{ExecutionContext, Future}
-import play.api.mvc.Request
-import play.api.mvc.Result
-import play.api.mvc.BodyParsers
-import play.api.mvc.DefaultPlayBodyParsers
-import play.api.http.HttpErrorHandler
-import akka.stream.scaladsl.Flow
-import play.api.mvc.RequestHeader
+import org.apache.xml.serialize.LineSeparator
+import akka.{Done, NotUsed}
 import akka.stream.Materializer
 
 @Singleton()
-class UploadController @Inject()(uriGenerator: UploadUriGenerator, proxyService: ProxyService, cc: ControllerComponents, x: DefaultPlayBodyParsers)(
-  implicit ec: ExecutionContext)
+class UploadController @Inject()(uriGenerator: UploadUriGenerator, proxyService: ProxyService, cc: ControllerComponents)(
+  implicit ec : ExecutionContext
+         , mat: Materializer
+         )
     extends AbstractController(cc) {
-
-  private val missingRedirectUrl =
-    Response.badRequest("Could not find error_action_redirect field in request")
 
   private def getRequiredHeaders(headers: Seq[(String, String)]): Seq[(String, String)] =
     headers.filter {
@@ -53,52 +47,79 @@ class UploadController @Inject()(uriGenerator: UploadUriGenerator, proxyService:
     }
 
 
-  def upload(destination: String): Action[MultipartFormData[Unit]] =
-  //   Action.async(SplitBodyParser(rawParser, parse.multipartFormData(fileIgnoreHandler))) { implicit request =>
-    Action.async(parse.multipartFormData(fileIgnoreHandler)) { implicit request =>
-      val url              = uriGenerator.uri(destination)
-      println(s"url=$url")
-  //     val (raw, multipart) = request.body
-      val multipart = request.body
-      // println(s"raw=$raw")
-      println(s"multipart=$multipart")
-      val headers          = request.headers.headers
-      val redirectUrl      = multipart.dataParts.get("error_action_redirect").map(_.head)
-      println(s"redirectUrl=$redirectUrl")
+  def upload(destination: String) =
+    Action.async(rawParser) { implicit request =>
+      val url         = uriGenerator.uri(destination)
+
+      val optBoundary = request.headers.get("Content-Type")
+                          .flatMap(ct => scala.util.Try(ct.split("boundary=")(1)).toOption)
+
+      val headers     = request.headers.headers
 
       (for {
-         redirectUrl <- EitherT.fromEither[Future](redirectUrl.toRight(missingRedirectUrl))
-         response    <- { println(s"forwarding request")
-                          /*proxyService
-                            .post(url, raw, getRequiredHeaders(headers))
-                            .leftMap(Response.redirect(redirectUrl, _))*/
-                            EitherT.pure[Future, Result](BadRequest("Skipping call"))
-                        }
+         boundary          <- EitherT.fromEither[Future](optBoundary
+                                .toRight(Response.badRequest("Missing boundary in headers"))
+                              )
+         redirectUrlHolder =  new RedirectUrlHolder
+         raw               =  request.body.alsoTo(redirectUrlExtractorSink(boundary, redirectUrlHolder))
+         response          <- { println(s"forwarding request")
+                                proxyService
+                                  .post("http://localhost:9000/destination", raw, getRequiredHeaders(headers))
+                                  .map { a =>
+                                    println("success")
+                                    println(s"redirectUrl=${redirectUrlHolder.redirectUrl}")
+                                    a
+                                  }
+                                  .leftMap { b =>
+                                    println("failure")
+                                    redirectUrlHolder.redirectUrl match {
+                                      case Some(redirectUrl) => Response.redirect(redirectUrl, b)
+                                      case None              => Response.badRequest("Could not find error_action_redirect field in request")
+                                    }
+                                  }
+                               }
+         _                 =  println("forwarded")
        } yield response
       ).merge
     }
 
-  // def upload(destination: String): Action[(Source[ByteString, _], MultipartFormData[Unit])] =
-  //   Action.async(SplitBodyParser(rawParser, parse.multipartFormData(fileIgnoreHandler))) { implicit request =>
-  //     val url              = uriGenerator.uri(destination)
-  //     println(s"url=$url")
-  //     val (raw, multipart) = request.body
-  //     println(s"raw=$raw")
-  //     println(s"multipart=$multipart")
-  //     val headers          = request.headers.headers
-  //     val redirectUrl      = multipart.dataParts.get("error_action_redirect").map(_.head)
-  //     println(s"redirectUrl=$redirectUrl")
+    class RedirectUrlHolder(var redirectUrl: Option[String] = None)
 
-  //     (for {
-  //        redirectUrl <- EitherT.fromEither[Future](redirectUrl.toRight(missingRedirectUrl))
-  //        response    <- { println(s"forwarding request")
-  //                         proxyService
-  //                           .post(url, raw, getRequiredHeaders(headers))
-  //                           .leftMap(Response.redirect(redirectUrl, _))
-  //                       }
-  //      } yield response
-  //     ).merge
-  //   }
+    trait ReadingState
+    case object ToRead extends ReadingState
+    case object Reading extends ReadingState
+    case object Read extends ReadingState
+
+    def redirectUrlExtractorSink(boundary: String, redirectUrlHolder: RedirectUrlHolder): Sink[ByteString, NotUsed] = {
+      def sink(boundary: String, redirectUrlHolder: RedirectUrlHolder): Sink[String, Future[ReadingState]] = {
+        Sink.fold[ReadingState, String](ToRead){ (state, t) =>
+          state match {
+            case ToRead if t == "Content-Disposition: form-data; name=\"error_action_redirect\"" => println("->Reading"); Reading
+            case ToRead if t == "Content-Disposition: attachment; name=\"error_action_redirect\"" => println("->Reading"); Reading
+            case Reading if t == s"--$boundary" => println("->Read"); Read
+            case Reading =>
+              redirectUrlHolder.redirectUrl = redirectUrlHolder.redirectUrl match {
+                case None     => Some(t)
+                case Some(t1) => Some(t1 + t)
+              }
+              println("->Reading2");
+              Reading
+            case _ => print("."); state
+          }
+        }
+      }
+
+      Flow[ByteString]
+        .via(Framing.delimiter(ByteString(LineSeparator.Windows), maximumFrameLength = 1024))
+        .map(_.utf8String)
+        .to(sink(boundary, redirectUrlHolder))
+    }
+
+  def destination =
+    Action.async(rawParser) { request =>
+      println("destination..")
+      Future(Ok.chunked(request.body))
+    }
 
   // alternative to parser.raw which doesn't write to memory/disk, but allows streaming straight to a sink
   private def rawParser: BodyParser[Source[ByteString, _]] =
@@ -106,72 +127,5 @@ class UploadController @Inject()(uriGenerator: UploadUriGenerator, proxyService:
       Accumulator
         .source[ByteString]
 	      .map(Right.apply)
-  }
-
-  // skip file parts
-  private def fileIgnoreHandler: Multipart.FilePartHandler[Unit] = {
-    case Multipart.FileInfo(partName, filename, contentType) =>
-      Accumulator(Sink.ignore).mapFuture(_ => Future.successful(MultipartFormData.FilePart(partName, filename, contentType, ())))
-  }
-
-
-  def multipartFormData[A](filePartHandler: Multipart.FilePartHandler[A])(implicit mat: Materializer): BodyParser[MultipartFormData[A]] = {
-    BodyParser("multipartFormData") { request =>
-      multipartParser(x.DefaultMaxTextLength, filePartHandler, x.errorHandler).apply(request)
-    }
-  }
-
-
-
-  /**
-   * Parses the request body into a Multipart body.
-   *
-   * @param maxMemoryBufferSize The maximum amount of data to parse into memory.
-   * @param filePartHandler The accumulator to handle the file parts.
-   */
-  def multipartParser[A](maxMemoryBufferSize: Int, filePartHandler: Multipart.FilePartHandler[A], errorHandler: HttpErrorHandler)(implicit mat: Materializer): BodyParser[MultipartFormData[A]] = BodyParser { request =>
-    Multipart.partParser(maxMemoryBufferSize, errorHandler) {
-      val handleFileParts = Flow[MultipartFormData.Part[Source[ByteString, _]]].mapAsync(1) {
-        case filePart: MultipartFormData.FilePart[Source[ByteString, _]] =>
-          filePartHandler(Multipart.FileInfo(filePart.key, filePart.filename, filePart.contentType)).run(filePart.ref)
-        case other: MultipartFormData.Part[_] => Future.successful(other.asInstanceOf[MultipartFormData.Part[Nothing]])
-      }
-
-      val multipartAccumulator = Accumulator(Sink.fold[Seq[MultipartFormData.Part[A]], MultipartFormData.Part[A]](Vector.empty)(_ :+ _)).mapFuture { parts =>
-
-        def parseError = parts.collectFirst {
-          case MultipartFormData.ParseError(msg) => createBadResult(msg, errorHandler = errorHandler)(request)
-        }
-
-        def bufferExceededError = parts.collectFirst {
-          case MultipartFormData.MaxMemoryBufferExceeded(msg) => createBadResult(msg, REQUEST_ENTITY_TOO_LARGE, errorHandler)(request)
-        }
-
-        parseError orElse bufferExceededError getOrElse {
-          Future.successful(Right(MultipartFormData(
-            parts
-              .collect {
-                case dp: MultipartFormData.DataPart => dp
-              }.groupBy(_.key)
-              .map {
-                case (key, partValues) => key -> partValues.map(_.value)
-              },
-            parts.collect {
-              case fp: MultipartFormData.FilePart[A] => fp
-            },
-            parts.collect {
-              case bad: MultipartFormData.BadPart => bad
-            }
-          )))
-        }
-
-      }
-
-      multipartAccumulator.through(handleFileParts)
-    }.apply(request)
-  }
-
-  private def createBadResult[A](msg: String, status: Int = BAD_REQUEST, errorHandler: HttpErrorHandler): RequestHeader => Future[Either[Result, A]] = { request =>
-    errorHandler.onClientError(request, status, msg).map(Left(_))
   }
 }
