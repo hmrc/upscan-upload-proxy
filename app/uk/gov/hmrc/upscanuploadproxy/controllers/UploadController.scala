@@ -33,6 +33,16 @@ import scala.concurrent.{ExecutionContext, Future}
 import org.apache.xml.serialize.LineSeparator
 import akka.{Done, NotUsed}
 import akka.stream.Materializer
+import akka.stream.SinkShape
+import akka.stream.scaladsl.GraphDSL.Implicits._
+import akka.stream.scaladsl.{Broadcast, GraphDSL, Sink}
+import akka.util.ByteString
+import cats.data.EitherT
+import cats.implicits._
+import play.api.libs.streams.Accumulator
+import play.api.mvc._
+import akka.stream.scaladsl.Keep
+
 
 @Singleton()
 class UploadController @Inject()(uriGenerator: UploadUriGenerator, proxyService: ProxyService, cc: ControllerComponents)(
@@ -60,24 +70,22 @@ class UploadController @Inject()(uriGenerator: UploadUriGenerator, proxyService:
          boundary          <- EitherT.fromEither[Future](optBoundary
                                 .toRight(Response.badRequest("Missing boundary in headers"))
                               )
-         redirectUrlHolder =  new RedirectUrlHolder
-         raw               =  request.body.alsoTo(redirectUrlExtractorSink(boundary, redirectUrlHolder))
-         response          <- { println(s"forwarding request")
-                                proxyService
-                                  .post("http://localhost:9000/destination", raw, getRequiredHeaders(headers))
-                                  .map { a =>
-                                    println("success")
-                                    println(s"redirectUrl=${redirectUrlHolder.redirectUrl}")
-                                    a
-                                  }
-                                  .leftMap { b =>
-                                    println("failure")
-                                    redirectUrlHolder.redirectUrl match {
+         mat1: (Future[Either[String, Result]], Future[Context]) =
+            request.body
+            .alsoToMat(fileUpload(headers))(Keep.right)
+            .toMat(redirectUrlExtractorSink(boundary))(Keep.both)
+            .run()
+
+         (fResponse, fCtx) = mat1
+         ctx <- EitherT.liftF(fCtx)
+         response <- EitherT(fResponse)
+                       .leftMap { b =>
+                                    println(s"failure: $b")
+                                    ctx.redirectUrl match {
                                       case Some(redirectUrl) => Response.redirect(redirectUrl, b)
                                       case None              => Response.badRequest("Could not find error_action_redirect field in request")
                                     }
                                   }
-                               }
          _                 =  println("forwarded")
        } yield response
       ).merge
@@ -90,30 +98,42 @@ class UploadController @Inject()(uriGenerator: UploadUriGenerator, proxyService:
     case object Reading extends ReadingState
     case object Read extends ReadingState
 
-    def redirectUrlExtractorSink(boundary: String, redirectUrlHolder: RedirectUrlHolder): Sink[ByteString, NotUsed] = {
-      def sink(boundary: String, redirectUrlHolder: RedirectUrlHolder): Sink[String, Future[ReadingState]] = {
-        Sink.fold[ReadingState, String](ToRead){ (state, t) =>
-          state match {
-            case ToRead if t == "Content-Disposition: form-data; name=\"error_action_redirect\"" => println("->Reading"); Reading
-            case ToRead if t == "Content-Disposition: attachment; name=\"error_action_redirect\"" => println("->Reading"); Reading
-            case Reading if t == s"--$boundary" => println("->Read"); Read
+    case class Context(state: ReadingState, redirectUrl: Option[String])
+
+    def redirectUrlExtractorSink(boundary: String): Sink[ByteString, Future[Context]] = {
+      def sink(boundary: String): Sink[String, Future[Context]] = {
+        Sink.fold[Context, String](Context(ToRead, None)){ (ctx, t) =>
+          ctx.state match {
+            case ToRead if t == "Content-Disposition: form-data; name=\"error_action_redirect\"" => println("->Reading"); ctx.copy(state = Reading)
+            case ToRead if t == "Content-Disposition: attachment; name=\"error_action_redirect\"" => println("->Reading"); ctx.copy(state = Reading)
+            case Reading if t == s"--$boundary" => println("->Read"); ctx.copy(state = Read)
             case Reading =>
-              redirectUrlHolder.redirectUrl = redirectUrlHolder.redirectUrl match {
+              println("->Reading2");
+              ctx.copy(redirectUrl = ctx.redirectUrl match {
                 case None     => Some(t)
                 case Some(t1) => Some(t1 + t)
-              }
-              println("->Reading2");
-              Reading
-            case _ => print("."); state
+              })
+            case _ => print("."); ctx
           }
         }
       }
 
       Flow[ByteString]
-        .via(Framing.delimiter(ByteString(LineSeparator.Windows), maximumFrameLength = 1024))
+        // FIXME akka.stream.scaladsl.Framing$FramingException: Read 15742 bytes which is more than 1024 without seeing a line terminator
+        // (allowTruncation not working?)
+        .via(Framing.delimiter(ByteString(LineSeparator.Windows), maximumFrameLength = 1024, allowTruncation = true))
         .map(_.utf8String)
-        .to(sink(boundary, redirectUrlHolder))
+        .toMat(sink(boundary))(Keep.right)
     }
+
+  def fileUpload(headers: Seq[(String, String)]): Sink[ByteString, Future[Either[String, Result]]] =
+   Sink
+      .asPublisher[ByteString](fanout = false)
+      .mapMaterializedValue(Source.fromPublisher)
+      .mapMaterializedValue { source =>
+        proxyService
+          .post("http://localhost:9000/destination", source, getRequiredHeaders(headers)).value
+      }
 
   def destination =
     Action.async(rawParser) { request =>
