@@ -17,46 +17,42 @@
 package uk.gov.hmrc.upscanuploadproxy.controllers
 
 import akka.stream.Materializer
-import akka.stream.scaladsl.{Keep, Sink, Source}
-import akka.util.ByteString
+import akka.stream.scaladsl.{FileIO, Sink}
 import cats.data.EitherT
 import cats.implicits._
 import javax.inject.{Inject, Singleton}
-import play.api.mvc.{AbstractController, Action, BodyParser, ControllerComponents, Result}
 import play.api.libs.streams.Accumulator
-import scala.concurrent.{ExecutionContext, Future}
+import play.api.mvc.{AbstractController, Action, ControllerComponents, DefaultPlayBodyParsers, MultipartFormData, Request, Result}
+import play.core.parsers.Multipart
 import uk.gov.hmrc.upscanuploadproxy.UploadUriGenerator
 import uk.gov.hmrc.upscanuploadproxy.helpers.Response
-import uk.gov.hmrc.upscanuploadproxy.parsers.Multiparse
+import uk.gov.hmrc.upscanuploadproxy.parsers.CompositeBodyParser
 import uk.gov.hmrc.upscanuploadproxy.services.ProxyService
-
+import scala.concurrent.{ExecutionContext, Future}
 
 @Singleton()
-class UploadController @Inject()(uriGenerator: UploadUriGenerator, proxyService: ProxyService, cc: ControllerComponents)(
-  implicit ec : ExecutionContext
-         , mat: Materializer
-         )
+class UploadController @Inject()(
+    uriGenerator: UploadUriGenerator
+  , proxyService: ProxyService
+  , cc          : ControllerComponents
+  , x           : DefaultPlayBodyParsers
+  )(implicit ec : ExecutionContext
+           , mat: Materializer
+           )
     extends AbstractController(cc) {
 
   def upload(destination: String) =
-    Action.async(rawParser) { implicit request =>
+  Action.async(CompositeBodyParser(parse.raw, parse.multipartFormData(fileIgnoreHandler))) { implicit request =>
       val url = /* For testing */ "http://localhost:9000/destination" // uriGenerator.uri(destination)
+      val (raw, multipart) = request.body
       (for {
-         boundary          <- EitherT.fromEither[Future](
-                                request.headers.get("Content-Type")
-                                  .flatMap(ct => scala.util.Try(ct.split("boundary=")(1)).toOption)
-                                  .toRight(Response.badRequest("Missing boundary in headers"))
-                              )
-         (fResponse, fRedirectUrl) =  request.body
-                                .alsoToMat(fileUpload(url, request.headers.headers))(Keep.right)
-                                .toMat(Multiparse.extractMetaSink(boundary, "error_action_redirect"))(Keep.both)
-                                .run()
-         optRedirectUrl    <- EitherT.liftF(fRedirectUrl)
-         redirectUrl       <- EitherT.fromEither[Future](optRedirectUrl
-                                .toRight(Response.badRequest("Could not find error_action_redirect field in request"))
-                              )
-         response          <- EitherT(fResponse)
-                                .leftMap(b => Response.redirect(redirectUrl, b))
+         redirectUrl <- EitherT.fromEither[Future](
+                          multipart.dataParts.get("error_action_redirect").map(_.head)
+                            .toRight(Response.badRequest("Could not find error_action_redirect field in request"))
+                        )
+         response    <- proxyService
+                          .post(url, FileIO.fromPath(raw.asFile.toPath), getRequiredHeaders(request.headers.headers))
+                          .leftMap(Response.redirect(redirectUrl, _))
        } yield response /* For testing */ .withHeaders("X-Redirect-Url" -> redirectUrl)
       ).merge
     }
@@ -66,25 +62,9 @@ class UploadController @Inject()(uriGenerator: UploadUriGenerator, proxyService:
       case (header, _) => header.equalsIgnoreCase("content-type") || header.equalsIgnoreCase("content-length")
     }
 
-  def fileUpload(url: String, headers: Seq[(String, String)]): Sink[ByteString, Future[Either[String, Result]]] =
-   Sink
-      .asPublisher[ByteString](fanout = false)
-      .mapMaterializedValue(Source.fromPublisher)
-      .mapMaterializedValue { source =>
-        proxyService
-          .post(url, source, getRequiredHeaders(headers)).value
-      }
-
-  def destination =
-    Action.async(parse.raw) { request =>
-      Future(Ok(s"request length was ${request.body.size}"))
-    }
-
-  // alternative to parser.raw which doesn't write to memory/disk, but allows streaming straight to a sink
-  private def rawParser: BodyParser[Source[ByteString, _]] =
-    BodyParser("rawParser") { _ =>
-      Accumulator
-        .source[ByteString]
-	      .map(Right.apply)
+  // skip file parts
+  private def fileIgnoreHandler: Multipart.FilePartHandler[Unit] = {
+    case Multipart.FileInfo(partName, filename, contentType) =>
+      Accumulator(Sink.ignore).mapFuture(_ => Future.successful(MultipartFormData.FilePart(partName, filename, contentType, ())))
   }
 }

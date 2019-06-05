@@ -1,5 +1,6 @@
 # microservice specific routes
 
-->          /                                    health.Routes
-POST        /v1/uploads/:destination             uk.gov.hmrc.upscanuploadproxy.controllers.UploadController.upload(destination: String)
-POST        /destination                        uk.gov.hmrc.upscanuploadproxy.controllers.UploadController.destination
+->          /                                   health.Routes
+POST        /v1/uploads/:destination            uk.gov.hmrc.upscanuploadproxy.controllers.UploadController.upload(destination: String)
+POST        /v2/uploads/:destination            uk.gov.hmrc.upscanuploadproxy.controllers.UploadControllerStreaming.upload(destination: String)
+POST        /destination                        uk.gov.hmrc.upscanuploadproxy.controllers.UploadControllerStreaming.destination
