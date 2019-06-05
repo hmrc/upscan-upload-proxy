@@ -17,7 +17,7 @@
 package uk.gov.hmrc.upscanuploadproxy.parsers
 
 import akka.stream.scaladsl.GraphDSL.Implicits._
-import akka.stream.scaladsl.{Broadcast, FileIO, GraphDSL, Sink, Source}
+import akka.stream.scaladsl.{Broadcast, GraphDSL, Sink, Source}
 import akka.stream.{IOResult, SinkShape}
 import akka.util.ByteString
 import cats.data.EitherT
@@ -34,7 +34,6 @@ import scala.concurrent.{ExecutionContext, Future}
 case class UpscanRequest(redirectUrl: String, file: Source[ByteString, Future[IOResult]])
 
 object UpscanRequestParser {
-
   def serviceFileUploadParser(
     implicit ec: ExecutionContext,
     parser: PlayBodyParsers): BodyParser[UpscanRequest] =

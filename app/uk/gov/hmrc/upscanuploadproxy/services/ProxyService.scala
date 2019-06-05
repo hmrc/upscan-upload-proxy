@@ -26,12 +26,11 @@ import play.api.http.Status
 import play.api.libs.ws.{WSClient, WSResponse}
 import play.api.mvc.{Result, Results}
 
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 
 @Singleton
-class ProxyService @Inject()(wsClient: WSClient)(implicit m: Materializer) {
+class ProxyService @Inject()(wsClient: WSClient)(implicit m: Materializer, ec: ExecutionContext) {
 
   private val logger = LoggerFactory.getLogger(this.getClass)
 

@@ -28,11 +28,11 @@ import uk.gov.hmrc.upscanuploadproxy.services.ProxyService
 import scala.concurrent.ExecutionContext
 
 @Singleton()
-class UploadController @Inject()(uriGenerator: UploadUriGenerator, proxyService: ProxyService, cc: ControllerComponents)(
-  implicit ec: ExecutionContext)
+class UploadController @Inject()(uriGenerator: UploadUriGenerator, proxyService: ProxyService, cc: ControllerComponents)
     extends AbstractController(cc) {
 
   implicit val parser: PlayBodyParsers = cc.parsers
+  implicit val ec: ExecutionContext = cc.executionContext
 
   def upload(destination: String): Action[UpscanRequest] =
     Action.async(serviceFileUploadParser) { implicit request =>
