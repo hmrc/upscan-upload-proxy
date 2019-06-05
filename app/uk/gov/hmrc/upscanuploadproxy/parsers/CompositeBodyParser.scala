@@ -20,8 +20,6 @@ import akka.stream.SinkShape
 import akka.stream.scaladsl.GraphDSL.Implicits._
 import akka.stream.scaladsl.{Broadcast, GraphDSL, Sink}
 import akka.util.ByteString
-import cats.data.EitherT
-import cats.implicits._
 import play.api.libs.streams.Accumulator
 import play.api.mvc._
 
@@ -42,16 +40,19 @@ object CompositeBodyParser {
 
   private def combineFE[L, T1, T2](f1: Future[Either[L, T1]], f2: Future[Either[L, T2]])(
     implicit ec: ExecutionContext): Future[Either[L, (T1, T2)]] =
-    (for {
-      o1 <- EitherT(f1)
-      o2 <- EitherT(f2)
-    } yield (o1, o2)).value
+    for {
+      e1 <- f1
+      e2 <- f2
+    } yield
+      for {
+        v1 <- e1.right
+        v2 <- e2.right
+      } yield (v1, v2)
 
   private def combineSinks[T1, T2](
     sink1: Sink[ByteString, Future[Either[Result, T1]]],
     sink2: Sink[ByteString, Future[Either[Result, T2]]]
   )(implicit ec: ExecutionContext): Sink[ByteString, Future[Either[Result, (T1, T2)]]] =
-    // TODO can we use Sink.combine(sink1, sink2) ?
     Sink.fromGraph(GraphDSL.create(sink1, sink2)(combineFE) { implicit builder => (s1, s2) =>
       val broadcast = builder.add(Broadcast[ByteString](outputPorts = 2))
       broadcast.out(0) ~> s1

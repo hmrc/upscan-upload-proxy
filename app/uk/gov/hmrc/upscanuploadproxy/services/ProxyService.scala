@@ -19,20 +19,18 @@ package uk.gov.hmrc.upscanuploadproxy.services
 import akka.stream.Materializer
 import akka.stream.scaladsl.Source
 import akka.util.ByteString
-import cats.data.EitherT
 import com.google.inject.Singleton
 import javax.inject.Inject
 import org.slf4j.LoggerFactory
 import play.api.http.Status
-import play.api.libs.ws.WSClient
+import play.api.libs.ws.{WSClient, WSResponse}
 import play.api.mvc.{Result, Results}
 
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 
 @Singleton
-class ProxyService @Inject()(wsClient: WSClient)(implicit m: Materializer) {
+class ProxyService @Inject()(wsClient: WSClient)(implicit m: Materializer, ec: ExecutionContext) {
 
   private val logger = LoggerFactory.getLogger(this.getClass)
 
@@ -41,25 +39,27 @@ class ProxyService @Inject()(wsClient: WSClient)(implicit m: Materializer) {
   def post(
     url: String,
     source: Source[ByteString, _],
-    headers: Seq[(String, String)]): EitherT[Future, FailureResponse, SuccessResponse] = {
+    headers: Seq[(String, String)]): Future[Either[FailureResponse, SuccessResponse]] = {
 
     logger.info(s"Url :$url}")
 
-    val response = wsClient
-      .url(url)
-      .withMethod("POST")
-      .withFollowRedirects(false)
-      .withHttpHeaders(headers: _*)
-      .withBody(source)
-      .withRequestTimeout(Duration.Inf)
-      .execute("POST")
+    val response: Future[WSResponse] =
+      wsClient
+        .url(url)
+        .withMethod("POST")
+        .withFollowRedirects(false)
+        .withHttpHeaders(headers: _*)
+        .withBody(source)
+        .withRequestTimeout(Duration.Inf)
+        .execute("POST")
 
-    EitherT(response.map { r =>
+    response.map { r =>
       val headers = r.headers.toList.flatMap { case (h, v) => v.map((h, _)) }
+
       Either.cond(
         Status.isSuccessful(r.status) || Status.isRedirect(r.status),
         Results.Status(r.status)(r.body).withHeaders(headers: _*),
         r.body)
-    })
+    }
   }
 }
