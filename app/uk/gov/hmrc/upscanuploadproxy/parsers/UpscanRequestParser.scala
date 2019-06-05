@@ -20,8 +20,6 @@ import akka.stream.scaladsl.GraphDSL.Implicits._
 import akka.stream.scaladsl.{Broadcast, GraphDSL, Sink, Source}
 import akka.stream.{IOResult, SinkShape}
 import akka.util.ByteString
-import cats.data.EitherT
-import cats.implicits._
 import play.api.libs.streams.Accumulator
 import play.api.mvc.{BodyParser, PlayBodyParsers}
 import uk.gov.hmrc.upscanuploadproxy.parsers.EitherTUtils.combineAs
@@ -57,10 +55,13 @@ object UpscanRequestParser {
 object EitherTUtils {
   def combineAs[L, T1, T2, R](f: (T1, T2) => R)(f1: Future[Either[L, T1]], f2: Future[Either[L, T2]])(
     implicit ec: ExecutionContext): Future[Either[L, R]] = {
-    val result = for {
-      o1 <- EitherT(f1)
-      o2 <- EitherT(f2)
-    } yield f(o1, o2)
-    result.value
+
+    for {
+      e1 <- f1
+      e2 <- f2
+    } yield for {
+          v1 <- e1.right
+          v2 <- e2.right
+        } yield f(v1, v2)
   }
 }
