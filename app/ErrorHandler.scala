@@ -45,5 +45,5 @@ class ErrorHandler @Inject()(
     Future.successful(Response.notFound(s"Path '${request.path}' not found."))
 
   override protected def onBadRequest(request: RequestHeader, message: String): Future[Result] =
-    Future.successful(Response.badRequest(s"Bad request"))
+    Future.successful(Response.badRequest(s"Bad request: $message"))
 }

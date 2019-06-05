@@ -128,7 +128,7 @@ class UploadControllerSpec extends AcceptanceSpec with ScalaFutures {
         .futureValue
 
       response.status mustBe 400
-      response.body mustBe "{\"message\":\"Bad request\"}"
+      response.body mustBe "{\"message\":\"Bad request: Missing boundary header\"}"
       response.header("Content-Type") mustBe Some("application/json")
     }
 
@@ -147,7 +147,7 @@ class UploadControllerSpec extends AcceptanceSpec with ScalaFutures {
       val response = makeRequest("can not be parsed\n")
 
       response.status mustBe 400
-      response.body mustBe "{\"message\":\"Bad request\"}"
+      response.body mustBe "{\"message\":\"Bad request: Unexpected end of input\"}"
       response.header("Content-Type") mustBe Some("application/json")
     }
   }
