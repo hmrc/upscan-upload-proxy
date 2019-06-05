@@ -29,15 +29,20 @@ import play.core.parsers.Multipart.FileInfo
 
 import scala.concurrent.{ExecutionContext, Future}
 
+//case class ServiceRequestBody(raw: RawBuffer, multipartFormData: MultipartFormData[Unit])
+
 case class RawAndMultipartBodyParser(
   rawParser: BodyParser[RawBuffer],
   multipartParser: Multipart.FilePartHandler[Unit] => BodyParser[MultipartFormData[Unit]]
 )(implicit ec: ExecutionContext)
     extends BodyParser[(RawBuffer, MultipartFormData[Unit])] {
 
+  // What are you doing here? Confusing...
+
+  // FileInfo => Accumulator[ByteString, FilePart[Unit]]
   private def fileIgnoreHandler(): Multipart.FilePartHandler[Unit] = {
     case FileInfo(partName, filename, contentType) =>
-      Accumulator(Sink.ignore).mapFuture(_ => Future.successful(FilePart(partName, filename, contentType, ())))
+      Accumulator(Sink.ignore).map(_ => FilePart(partName, filename, contentType, ()))
   }
 
   private def combine[L, T1, T2](f1: Future[Either[L, T1]], f2: Future[Either[L, T2]]): Future[Either[L, (T1, T2)]] = {
@@ -49,16 +54,24 @@ case class RawAndMultipartBodyParser(
   }
 
   type Acc[T] = Accumulator[ByteString, Either[Result, T]]
+//override def apply(requestHeader: RequestHeader): Accumulator[ByteString, Either[Result, ServiceRequestBody]] = {
   override def apply(requestHeader: RequestHeader): Acc[(RawBuffer, MultipartFormData[Unit])] = {
-    val rawAccumulator       = rawParser(requestHeader)
+    // Stores the body in memory as a blob of bytes
+    val rawAccumulator = rawParser(requestHeader)
+
+    // Stores the body in memory as a multipartForm Data class. These have file parts.
     val multipartAccumulator = multipartParser(fileIgnoreHandler())(requestHeader)
-    val combinedSink = Sink.fromGraph(GraphDSL.create(rawAccumulator.toSink, multipartAccumulator.toSink)(combine) {
-      implicit builder => (rawSink, multipartSink) =>
-        val broadcast = builder.add(Broadcast[ByteString](outputPorts = 2))
-        broadcast.out(0) ~> rawSink
-        broadcast.out(1) ~> multipartSink
-        SinkShape(broadcast.in)
-    })
+
+    // Combines the sinks into a sink with materialised value being a Future[Tuple]
+    val combinedSink: Sink[ByteString, Future[Either[Result, (RawBuffer, MultipartFormData[Unit])]]] =
+      Sink.fromGraph(GraphDSL.create(rawAccumulator.toSink, multipartAccumulator.toSink)(combine) {
+        implicit builder => (rawSink, multipartSink) =>
+          val broadcast = builder.add(Broadcast[ByteString](outputPorts = 2))
+          broadcast.out(0) ~> rawSink
+          broadcast.out(1) ~> multipartSink
+          SinkShape(broadcast.in)
+      })
+
     Accumulator(combinedSink)
   }
 }

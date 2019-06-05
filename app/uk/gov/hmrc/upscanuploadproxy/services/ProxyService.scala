@@ -19,12 +19,11 @@ package uk.gov.hmrc.upscanuploadproxy.services
 import akka.stream.Materializer
 import akka.stream.scaladsl.Source
 import akka.util.ByteString
-import cats.data.EitherT
 import com.google.inject.Singleton
 import javax.inject.Inject
 import org.slf4j.LoggerFactory
 import play.api.http.Status
-import play.api.libs.ws.WSClient
+import play.api.libs.ws.{WSClient, WSResponse}
 import play.api.mvc.{Result, Results}
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -38,28 +37,32 @@ class ProxyService @Inject()(wsClient: WSClient)(implicit m: Materializer) {
 
   type SuccessResponse = Result
   type FailureResponse = String
+
   def post(
     url: String,
     source: Source[ByteString, _],
-    headers: Seq[(String, String)]): EitherT[Future, FailureResponse, SuccessResponse] = {
+    headers: Seq[(String, String)]): Future[Either[String, SuccessResponse]] = {
 
     logger.info(s"Url :$url}")
 
-    val response = wsClient
-      .url(url)
-      .withMethod("POST")
-      .withFollowRedirects(false)
-      .withHttpHeaders(headers: _*)
-      .withBody(source)
-      .withRequestTimeout(Duration.Inf)
-      .execute("POST")
+    val response: Future[WSResponse] =
+      wsClient
+        .url(url)
+        .withMethod("POST")
+        .withFollowRedirects(false)
+        .withHttpHeaders(headers: _*)
+        .withBody(source)
+        .withRequestTimeout(Duration.Inf)
+        .execute("POST")
 
-    EitherT(response.map { r =>
+    response.map { r =>
+//      Why do you need to do this?
       val headers = r.headers.toList.flatMap { case (h, v) => v.map((h, _)) }
+
       Either.cond(
         Status.isSuccessful(r.status) || Status.isRedirect(r.status),
         Results.Status(r.status)(r.body).withHeaders(headers: _*),
         r.body)
-    })
+    }
   }
 }

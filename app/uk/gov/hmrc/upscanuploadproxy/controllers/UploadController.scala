@@ -16,42 +16,44 @@
 
 package uk.gov.hmrc.upscanuploadproxy.controllers
 
-import akka.stream.scaladsl.FileIO
-import cats.data.EitherT
-import cats.implicits._
 import javax.inject.{Inject, Singleton}
 import play.api.mvc._
 import uk.gov.hmrc.upscanuploadproxy.UploadUriGenerator
+import uk.gov.hmrc.upscanuploadproxy.controllers.S3Headers.extractS3Headers
 import uk.gov.hmrc.upscanuploadproxy.helpers.Response
-import uk.gov.hmrc.upscanuploadproxy.parsers.RawAndMultipartBodyParser
+import uk.gov.hmrc.upscanuploadproxy.parsers.UpscanRequest
+import uk.gov.hmrc.upscanuploadproxy.parsers.UpscanRequestParser._
 import uk.gov.hmrc.upscanuploadproxy.services.ProxyService
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.ExecutionContext
 
 @Singleton()
 class UploadController @Inject()(uriGenerator: UploadUriGenerator, proxyService: ProxyService, cc: ControllerComponents)(
   implicit ec: ExecutionContext)
     extends AbstractController(cc) {
 
-  private val missingRedirectUrl = Response.badRequest("Could not find error_action_redirect field in request")
+  implicit val parser: PlayBodyParsers = cc.parsers
 
-  private def getRequiredHeaders(headers: Seq[(String, String)]): Seq[(String, String)] = headers.filter {
-    case (header, _) => header.equalsIgnoreCase("content-type") || header.equalsIgnoreCase("content-length")
-  }
+  def upload(destination: String): Action[UpscanRequest] =
+    Action.async(serviceFileUploadParser) { implicit request =>
+      // TODO: Move the generation to the route page using a validation case class
+      val url          = uriGenerator.uri(destination)
+      val proxyHeaders = extractS3Headers(request.headers.headers)
 
-  def upload(destination: String): Action[(RawBuffer, MultipartFormData[Unit])] =
-    Action.async(RawAndMultipartBodyParser(parse.raw, parse.multipartFormData(_))) { implicit request =>
-      val url              = uriGenerator.uri(destination)
-      val (raw, multipart) = request.body
-      val headers          = request.headers.headers
-      val redirectUrl      = multipart.dataParts.get("error_action_redirect").map(_.head)
+      proxyService
+        .post(url, request.body.file, proxyHeaders)
+        .map {
+          case Right(result)      => result
+          case Left(errorMessage) => Response.redirect(request.body.redirectUrl, errorMessage)
+        }
 
-      (for {
-        redirectUrl <- EitherT.fromEither[Future](redirectUrl.toRight(missingRedirectUrl))
-        response <- proxyService
-                     .post(url, FileIO.fromPath(raw.asFile.toPath), getRequiredHeaders(headers))
-                     .leftMap(Response.redirect(redirectUrl, _))
+    }
+}
 
-      } yield response).merge
+object S3Headers {
+  def extractS3Headers(headers: Seq[(String, String)]): Seq[(String, String)] =
+    headers.filter {
+      case (header, _) =>
+        header.equalsIgnoreCase("content-type") || header.equalsIgnoreCase("content-length")
     }
 }
