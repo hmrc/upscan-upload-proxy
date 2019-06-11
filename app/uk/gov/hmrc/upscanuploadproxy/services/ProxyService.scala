@@ -24,42 +24,55 @@ import javax.inject.Inject
 import org.slf4j.LoggerFactory
 import play.api.http.Status
 import play.api.libs.ws.{WSClient, WSResponse}
-import play.api.mvc.{Result, Results}
+import play.api.mvc.{Request, Result, Results}
 
-import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
+import scala.concurrent.{ExecutionContext, Future}
 
 @Singleton
 class ProxyService @Inject()(wsClient: WSClient)(implicit m: Materializer, ec: ExecutionContext) {
 
   private val logger = LoggerFactory.getLogger(this.getClass)
 
+  def proxy[T](
+    url: String,
+    request: Request[_],
+    source: Source[ByteString, _],
+    processResponse: WSResponse => T): Future[T] = {
+
+    logger.info(s"Request: Url: $url Headers: ${request.headers.headers}")
+
+    wsClient
+      .url(url)
+      .withFollowRedirects(false)
+      .withMethod(request.method)
+      .withHttpHeaders(request.headers.headers: _*)
+      .withQueryStringParameters(request.queryString.mapValues(_.head).toSeq: _*)
+      .withRequestTimeout(Duration.Inf)
+      .withBody(source)
+      .execute(request.method)
+      .map(logResponse)
+      .map(processResponse)
+  }
+
+  private def logResponse(response: WSResponse): WSResponse = {
+    logger.info(s"Response: Status ${response.status}, Body ${response.body}, Headers ${response.headers}")
+    response
+  }
+}
+
+object ProxyService {
+
   type SuccessResponse = Result
   type FailureResponse = String
-  def post(
-    url: String,
-    source: Source[ByteString, _],
-    headers: Seq[(String, String)]): Future[Either[FailureResponse, SuccessResponse]] = {
+  def toResultEither(response: WSResponse): Either[FailureResponse, SuccessResponse] =
+    Either.cond(
+      Status.isSuccessful(response.status) || Status.isRedirect(response.status),
+      ProxyService.toResult(response),
+      response.body)
 
-    logger.info(s"Url :$url}")
-
-    val response: Future[WSResponse] =
-      wsClient
-        .url(url)
-        .withMethod("POST")
-        .withFollowRedirects(false)
-        .withHttpHeaders(headers: _*)
-        .withBody(source)
-        .withRequestTimeout(Duration.Inf)
-        .execute("POST")
-
-    response.map { r =>
-      val headers = r.headers.toList.flatMap { case (h, v) => v.map((h, _)) }
-
-      Either.cond(
-        Status.isSuccessful(r.status) || Status.isRedirect(r.status),
-        Results.Status(r.status)(r.body).withHeaders(headers: _*),
-        r.body)
-    }
+  def toResult(response: WSResponse): Result = {
+    val headers = response.headers.toList.flatMap { case (h, v) => v.map((h, _)) }
+    Results.Status(response.status)(response.body).withHeaders(headers: _*)
   }
 }
