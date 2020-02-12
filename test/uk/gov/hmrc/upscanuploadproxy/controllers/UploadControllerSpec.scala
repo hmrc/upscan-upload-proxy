@@ -20,11 +20,14 @@ import com.github.tomakehurst.wiremock.client.WireMock._
 import com.github.tomakehurst.wiremock.http.{HttpHeader, HttpHeaders}
 import com.github.tomakehurst.wiremock.stubbing.StubMapping
 import com.sun.org.apache.xml.internal.serialize.LineSeparator
+import org.apache.http.client.utils.URIBuilder
+import org.apache.http.message.BasicNameValuePair
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.time.{Millis, Span}
 import play.api.libs.ws.WSResponse
 import uk.gov.hmrc.integration.UrlHelper.-/
 
+import scala.collection.JavaConverters._
 import scala.io.Source
 
 class UploadControllerSpec extends AcceptanceSpec with ScalaFutures {
@@ -48,7 +51,7 @@ class UploadControllerSpec extends AcceptanceSpec with ScalaFutures {
     "proxy response on S3 2xx" in {
       stubForMultipart("/s3", 204)
 
-      val postBody = readResource("/simple-request", LineSeparator.Windows)
+      val postBody = readResource("/simple-request")
       val response = makeRequest(postBody)
 
       response.status mustBe 204
@@ -59,7 +62,7 @@ class UploadControllerSpec extends AcceptanceSpec with ScalaFutures {
       val locationHeader = new HttpHeader("Location", "https://www.hmrc.gov.uk?a=a&b=b")
       stubForMultipart(url = "/s3", status = 303, headers = new HttpHeaders(locationHeader))
 
-      val postBody = readResource("/simple-request", LineSeparator.Windows)
+      val postBody = readResource("/simple-request")
       val response = makeRequest(postBody)
 
       response.status mustBe 303
@@ -70,40 +73,53 @@ class UploadControllerSpec extends AcceptanceSpec with ScalaFutures {
     "redirect on S3 4xx" in {
       stubForMultipart("/s3", 400, "<Error><Message>failure</Message></Error>")
 
-      val postBody = readResource("/simple-request", LineSeparator.Windows)
+      val postBody = readResource("/simple-request")
       val response = makeRequest(postBody)
+      val responseLocationUrl = new URIBuilder(response.header("Location").getOrElse(""))
 
       response.status mustBe 303
       response.body mustBe ""
-      response.header("Location") mustBe Some("https://www.amazon.co.uk?errorMessage=failure")
+      responseLocationUrl.getHost mustBe "www.amazon.co.uk"
+      responseLocationUrl.getQueryParams.asScala must contain theSameElementsAs Seq(
+        new BasicNameValuePair("errorMessage", "failure"),
+        new BasicNameValuePair("fileReference", "b198de49-e7b5-49a8-83ff-068fc9357481")
+      )
     }
 
     "redirect - without query parameter on S3 4xx when response xml can not be parsed" in {
       stubForMultipart("/s3", 404, "successful")
 
-      val postBody = readResource("/simple-request", LineSeparator.Windows)
+      val postBody = readResource("/simple-request")
       val response = makeRequest(postBody)
+      val responseLocationUrl = new URIBuilder(response.header("Location").getOrElse(""))
 
       response.status mustBe 303
       response.body mustBe ""
-      response.header("Location") mustBe Some("https://www.amazon.co.uk")
+      responseLocationUrl.getHost mustBe "www.amazon.co.uk"
+      responseLocationUrl.getQueryParams.asScala must contain theSameElementsAs Seq(
+        new BasicNameValuePair("fileReference", "b198de49-e7b5-49a8-83ff-068fc9357481")
+      )
     }
 
     "redirect on S3 5xx" in {
-
       stubForMultipart("/s3", 500, "<Error><Message>internal server error</Message></Error>")
 
-      val postBody = readResource("/simple-request", LineSeparator.Windows)
+      val postBody = readResource("/simple-request")
       val response = makeRequest(postBody)
+      val responseLocationUrl = new URIBuilder(response.header("Location").getOrElse(""))
 
       response.status mustBe 303
       response.body mustBe ""
-      response.header("Location") mustBe Some("https://www.amazon.co.uk?errorMessage=internal server error")
+      responseLocationUrl.getHost mustBe "www.amazon.co.uk"
+      responseLocationUrl.getQueryParams.asScala must contain theSameElementsAs Seq(
+        new BasicNameValuePair("errorMessage", "internal server error"),
+        new BasicNameValuePair("fileReference", "b198de49-e7b5-49a8-83ff-068fc9357481")
+      )
     }
 
     "return json error response on missing destination path parameter" in {
 
-      val postBody = readResource("/simple-request", LineSeparator.Windows)
+      val postBody = readResource("/simple-request")
       val response = wsClient
         .url(resource("v1/uploads"))
         .withHttpHeaders(
@@ -119,8 +135,7 @@ class UploadControllerSpec extends AcceptanceSpec with ScalaFutures {
 
     "return json error response on missing content type" in {
 
-      val postBody = readResource("/simple-request", LineSeparator.Windows)
-
+      val postBody = readResource("/simple-request")
       val response = wsClient
         .url(resource("v1/uploads/bucketName"))
         .withFollowRedirects(false)
@@ -134,7 +149,7 @@ class UploadControllerSpec extends AcceptanceSpec with ScalaFutures {
 
     "return json error response when error_action_redirect is missing" in {
 
-      val postBody = readResource("/request-missing-error-action-redirect", LineSeparator.Windows)
+      val postBody = readResource("/request-missing-error-action-redirect")
       val response = makeRequest(postBody)
 
       response.status mustBe 400
@@ -152,7 +167,7 @@ class UploadControllerSpec extends AcceptanceSpec with ScalaFutures {
     }
   }
 
-  private def readResource(resourcePath: String, lineSeparator: String = ""): String = {
+  private def readResource(resourcePath: String, lineSeparator: String = LineSeparator.Windows): String = {
 
     val url    = getClass.getResource(resourcePath)
     val source = Source.fromURL(url)
@@ -173,7 +188,7 @@ class UploadControllerSpec extends AcceptanceSpec with ScalaFutures {
         .withMultipartRequestBody(aMultipart("Content-Type")
           .withBody(equalTo("application/text")))
         .withMultipartRequestBody(aMultipart("key")
-          .withBody(equalTo("helloworld.txt")))
+          .withBody(equalTo("b198de49-e7b5-49a8-83ff-068fc9357481")))
         .withMultipartRequestBody(aMultipart("error_action_redirect")
           .withBody(equalTo("https://www.amazon.co.uk")))
         .withMultipartRequestBody(aMultipart()
@@ -186,5 +201,4 @@ class UploadControllerSpec extends AcceptanceSpec with ScalaFutures {
             .withBody(body)
             .withHeaders(headers)
         ))
-
 }

@@ -5,8 +5,9 @@ object AppDependencies {
 
   val compile = Seq(
     ws,
-    "uk.gov.hmrc"       %% "bootstrap-play-26" % "0.39.0",
-    "com.typesafe.play" %% "play-json"         % "2.7.1"
+    "uk.gov.hmrc"               %% "bootstrap-play-26" % "0.39.0",
+    "com.typesafe.play"         %% "play-json"         % "2.7.1",
+    "org.apache.httpcomponents" % "httpclient"         % "4.5.11"
   )
 
   val test = Seq(

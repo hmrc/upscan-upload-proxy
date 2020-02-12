@@ -16,7 +16,10 @@
 
 package uk.gov.hmrc.upscanuploadproxy.parsers
 
+import java.nio.charset.StandardCharsets.UTF_8
+
 import akka.stream.scaladsl.Sink
+import org.apache.http.client.utils.URIBuilder
 import play.api.libs.streams.Accumulator
 import play.api.mvc.MultipartFormData.FilePart
 import play.api.mvc.{BodyParser, MultipartFormData, PlayBodyParsers, Result}
@@ -24,14 +27,15 @@ import play.core.parsers.Multipart
 import uk.gov.hmrc.upscanuploadproxy.helpers.Response
 
 import scala.concurrent.ExecutionContext
+import scala.util.Try
 
-object RedirectUrlParser {
+object RedirectUrlWithKeyParser {
 
   def parser(parser: PlayBodyParsers)(implicit ec: ExecutionContext): BodyParser[String] =
     BodyParser { requestHeader =>
       parser
         .multipartFormData(fileIgnoreHandler)(requestHeader)
-        .map(_.right.map(extractErrorActionRedirect).joinRight)
+        .map(_.right.map(extractRedirectWithKey).joinRight)
     }
 
   private def fileIgnoreHandler(implicit ec: ExecutionContext): Multipart.FilePartHandler[Unit] =
@@ -39,12 +43,30 @@ object RedirectUrlParser {
       Accumulator(Sink.ignore)
         .map(_ => FilePart(fileInfo.partName, fileInfo.fileName, fileInfo.contentType, ()))
 
+  private def extractRedirectWithKey(multiPartFormData: MultipartFormData[Unit]): Either[Result, String] =
+    (extractErrorActionRedirect(multiPartFormData), extractKey(multiPartFormData)) match {
+      case (Right(redirectUrl), Right(key)) => buildErrorActionRedirectUrl(redirectUrl, key)
+      case (l@Left(_), _ )                  => l
+      case (_, r@Left(_))                   => r
+    }
+
   private def extractErrorActionRedirect(multiPartFormData: MultipartFormData[Unit]): Either[Result, String] =
+    extractSingletonFormValue("error_action_redirect", multiPartFormData).toRight(left = missingRedirectUrl)
+
+  private def extractKey(multiPartFormData: MultipartFormData[Unit]): Either[Result, String] =
+    extractSingletonFormValue("key", multiPartFormData).toRight(left = missingKey)
+
+  private def extractSingletonFormValue(key: String, multiPartFormData: MultipartFormData[Unit]): Option[String] =
     multiPartFormData.dataParts
-      .get("error_action_redirect")
+      .get(key)
       .flatMap(_.headOption)
-      .toRight(missingRedirectUrl)
+
+  private def buildErrorActionRedirectUrl(redirectUrl: String, key: String): Either[Result, String] =
+    Try {
+      new URIBuilder(redirectUrl, UTF_8).addParameter("fileReference", key).build().toASCIIString
+    }.toOption.toRight(left = badRedirectUrl)
 
   private val missingRedirectUrl = Response.badRequest("Could not find error_action_redirect field in request")
-
+  private val missingKey = Response.badRequest("Could not find key field in request")
+  private val badRedirectUrl = Response.badRequest("Unable to build valid redirect URL for error action")
 }
