@@ -1,8 +1,6 @@
 
 # upscan-upload-proxy
 
-This is a placeholder README.md for a new repository
-
 ### License
 
 This code is open source software licensed under the [Apache 2.0 License]("http://www.apache.org/licenses/LICENSE-2.0.html").
@@ -71,7 +69,7 @@ application/text
 ------WebKitFormBoundary7MA4YWxkTrZu0gW--
 Content-Disposition: form-data; name="key"
 
-helloworld.txt
+b198de49-e7b5-49a8-83ff-068fc9357481
 ------WebKitFormBoundary7MA4YWxkTrZu0gW--,
 Content-Disposition: form-data; name="acl"
 
@@ -83,7 +81,7 @@ application/text
 ------WebKitFormBoundary7MA4YWxkTrZu0gW--
 Content-Disposition: form-data; name="key"
 
-helloworld.txt
+b198de49-e7b5-49a8-83ff-068fc9357481
 ------WebKitFormBoundary7MA4YWxkTrZu0gW--
 Content-Disposition: form-data; name="file"; filename="/HelloWorld.txt
 
@@ -106,6 +104,6 @@ curl -X POST \
   -H 'content-type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW' \
   -F acl=public-read-write \
   -F Content-Type=application/text \
-  -F key=helloworld.txt \
+  -F key=b198de49-e7b5-49a8-83ff-068fc9357481 \
   -F file=@HelloWorld.txt
 ```

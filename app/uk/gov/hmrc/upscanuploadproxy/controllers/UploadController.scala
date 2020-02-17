@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 HM Revenue & Customs
+ * Copyright 2020 HM Revenue & Customs
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@ import play.api.mvc._
 import uk.gov.hmrc.upscanuploadproxy.UploadUriGenerator
 import uk.gov.hmrc.upscanuploadproxy.helpers.Response
 import uk.gov.hmrc.upscanuploadproxy.model.UploadRequest
-import uk.gov.hmrc.upscanuploadproxy.parsers.{CompositeBodyParser, RawParser, RedirectUrlParser}
+import uk.gov.hmrc.upscanuploadproxy.parsers.{CompositeBodyParser, RawParser, RedirectUrlWithKeyParser}
 import uk.gov.hmrc.upscanuploadproxy.services.ProxyService
 
 import scala.concurrent.ExecutionContext
@@ -56,7 +56,7 @@ class UploadController @Inject()(uriGenerator: UploadUriGenerator, proxyService:
   private val rawParser = RawParser.parser(cc.parsers)
 
   private val uploadRequestParser =
-    CompositeBodyParser(RedirectUrlParser.parser(cc.parsers), rawParser).map(UploadRequest.tupled)
+    CompositeBodyParser(RedirectUrlWithKeyParser.parser(cc.parsers), rawParser).map(UploadRequest.tupled)
 
   private val s3Headers = Set("origin", "access-control-request-method", "content-type", "content-length")
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2019 HM Revenue & Customs
+ * Copyright 2020 HM Revenue & Customs
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,8 @@
  */
 
 package uk.gov.hmrc.upscanuploadproxy.helpers
+import org.apache.http.client.utils.URIBuilder
+import play.api.http.Status
 import play.api.libs.json.Json
 import play.api.mvc.{Result, Results}
 import uk.gov.hmrc.upscanuploadproxy.model.ErrorResponse
@@ -33,10 +35,10 @@ object Response {
   def internalServerError(message: String): Result =
     Results.InternalServerError(Json.toJson(ErrorResponse(message))(ErrorResponse.writes))
 
-  private def getErrorParameter(elemType: String, xml: Elem): Option[String] =
-    (xml \ elemType).headOption.map(node => s"error$elemType=${node.text}")
+  private def getErrorParameter(elemType: String, xml: Elem): Option[(String, String)] =
+    (xml \ elemType).headOption.map(node => s"error$elemType" -> node.text)
 
-  private def errorParamsList(body: String): List[String] =
+  private def errorParamsList(body: String): List[(String, String)] =
     Try(scala.xml.XML.loadString(body)).toOption.toList.flatMap { xml =>
       val requestId = getErrorParameter("RequestId", xml)
       val resource  = getErrorParameter("Resource", xml)
@@ -48,13 +50,11 @@ object Response {
 
   def redirect(url: String, body: String): Result = {
     val errors = errorParamsList(body)
-    val queryParams = if (errors.nonEmpty) {
-      errors.mkString("?", "&", "")
-    } else {
-      ""
+    val urlBuilder = errors.foldLeft(new URIBuilder(url)) { (urlBuilder, error) =>
+      urlBuilder.addParameter(error._1, error._2)
     }
 
-    Results.Redirect(s"$url$queryParams", 303)
+    Results.Redirect(urlBuilder.build().toASCIIString, Status.SEE_OTHER)
   }
 
 }
