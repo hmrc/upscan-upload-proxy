@@ -63,7 +63,7 @@ object RedirectUrlWithKeyParser {
 
   private def buildErrorActionRedirectUrl(redirectUrl: String, key: String): Either[Result, String] =
     Try {
-      new URIBuilder(redirectUrl, UTF_8).addParameter("fileReference", key).build().toASCIIString
+      new URIBuilder(redirectUrl, UTF_8).addParameter("key", key).build().toASCIIString
     }.toOption.toRight(left = badRedirectUrl)
 
   private val missingRedirectUrl = Response.badRequest("Could not find error_action_redirect field in request")
