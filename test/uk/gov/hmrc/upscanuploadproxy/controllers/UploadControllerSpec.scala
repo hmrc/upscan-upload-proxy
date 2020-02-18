@@ -82,7 +82,7 @@ class UploadControllerSpec extends AcceptanceSpec with ScalaFutures {
       responseLocationUrl.getHost mustBe "www.amazon.co.uk"
       responseLocationUrl.getQueryParams.asScala must contain theSameElementsAs Seq(
         new BasicNameValuePair("errorMessage", "failure"),
-        new BasicNameValuePair("fileReference", "b198de49-e7b5-49a8-83ff-068fc9357481")
+        new BasicNameValuePair("key", "b198de49-e7b5-49a8-83ff-068fc9357481")
       )
     }
 
@@ -97,7 +97,7 @@ class UploadControllerSpec extends AcceptanceSpec with ScalaFutures {
       response.body mustBe ""
       responseLocationUrl.getHost mustBe "www.amazon.co.uk"
       responseLocationUrl.getQueryParams.asScala must contain theSameElementsAs Seq(
-        new BasicNameValuePair("fileReference", "b198de49-e7b5-49a8-83ff-068fc9357481")
+        new BasicNameValuePair("key", "b198de49-e7b5-49a8-83ff-068fc9357481")
       )
     }
 
@@ -113,7 +113,7 @@ class UploadControllerSpec extends AcceptanceSpec with ScalaFutures {
       responseLocationUrl.getHost mustBe "www.amazon.co.uk"
       responseLocationUrl.getQueryParams.asScala must contain theSameElementsAs Seq(
         new BasicNameValuePair("errorMessage", "internal server error"),
-        new BasicNameValuePair("fileReference", "b198de49-e7b5-49a8-83ff-068fc9357481")
+        new BasicNameValuePair("key", "b198de49-e7b5-49a8-83ff-068fc9357481")
       )
     }
 
