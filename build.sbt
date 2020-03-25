@@ -1,4 +1,4 @@
-import com.typesafe.sbt.packager.Keys.bashScriptExtraDefines
+import com.typesafe.sbt.packager.Keys.{bashScriptExtraDefines, dockerBaseImage, dockerRepository, dockerUpdateLatest}
 import uk.gov.hmrc.DefaultBuildSettings.integrationTestSettings
 import uk.gov.hmrc.SbtArtifactory
 import uk.gov.hmrc.sbtdistributables.SbtDistributablesPlugin.publishingSettings
@@ -18,3 +18,7 @@ lazy val microservice = Project(appName, file("."))
   .configs(IntegrationTest)
   .settings(integrationTestSettings(): _*)
   .settings(resolvers += Resolver.jcenterRepo)
+  .settings(Seq(
+    dockerUpdateLatest := true,
+    dockerBaseImage := "artefacts.tax.service.gov.uk/hmrc-jre:latest",
+    dockerRepository := Some("artefacts.tax.service.gov.uk")))
