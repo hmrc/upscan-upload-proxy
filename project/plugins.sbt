@@ -14,3 +14,5 @@ addSbtPlugin("uk.gov.hmrc" % "sbt-distributables" % "1.5.0")
 addSbtPlugin("com.typesafe.play" % "sbt-plugin" % "2.6.20")
 
 addSbtPlugin("com.typesafe.sbt" % "sbt-git" % "1.0.0")
+
+addSbtPlugin("uk.gov.hmrc" % "sbt-git-versioning" % "2.1.0")
