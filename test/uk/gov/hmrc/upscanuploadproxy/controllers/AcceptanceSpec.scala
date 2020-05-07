@@ -16,9 +16,10 @@
 
 package uk.gov.hmrc.upscanuploadproxy.controllers
 
+import org.mockito.scalatest.MockitoSugar
 import org.scalatest.BeforeAndAfterEach
-import org.scalatest.mockito.MockitoSugar
-import org.scalatestplus.play.PlaySpec
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.wordspec.AnyWordSpec
 import org.scalatestplus.play.guice.GuiceOneServerPerSuite
 import play.api.Application
 import play.api.inject.bind
@@ -30,7 +31,8 @@ import uk.gov.hmrc.upscanuploadproxy.controllers.utils.WireMockHelper
 import scala.concurrent.ExecutionContextExecutor
 
 trait AcceptanceSpec
-    extends PlaySpec
+    extends AnyWordSpec
+    with Matchers
     with GuiceOneServerPerSuite
     with MockitoSugar
     with BeforeAndAfterEach

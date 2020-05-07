@@ -22,6 +22,7 @@ import akka.util.ByteString
 import com.google.inject.Singleton
 import javax.inject.Inject
 import org.slf4j.LoggerFactory
+import play.api.Logging
 import play.api.http.Status
 import play.api.libs.ws.{WSClient, WSResponse}
 import play.api.mvc.{Request, Result, Results}
@@ -30,9 +31,7 @@ import scala.concurrent.duration.Duration
 import scala.concurrent.{ExecutionContext, Future}
 
 @Singleton
-class ProxyService @Inject()(wsClient: WSClient)(implicit m: Materializer, ec: ExecutionContext) {
-
-  private val logger = LoggerFactory.getLogger(this.getClass)
+class ProxyService @Inject()(wsClient: WSClient)(implicit m: Materializer, ec: ExecutionContext) extends Logging {
 
   def proxy[T](
     url: String,
