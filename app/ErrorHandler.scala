@@ -29,9 +29,7 @@ class ErrorHandler @Inject()(
   config: Configuration,
   sourceMapper: OptionalSourceMapper,
   router: Provider[Router])
-    extends DefaultHttpErrorHandler(env, config, sourceMapper, router) {
-
-  private val logger: Logger = Logger(this.getClass)
+    extends DefaultHttpErrorHandler(env, config, sourceMapper, router) with Logging {
 
   override protected def onDevServerError(request: RequestHeader, exception: UsefulException): Future[Result] =
     onProdServerError(request, exception)
