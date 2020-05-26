@@ -18,15 +18,21 @@ package uk.gov.hmrc.upscanuploadproxy.parsers
 
 import akka.stream.scaladsl.{FileIO, Source}
 import akka.util.ByteString
-import play.api.mvc.{BodyParser, PlayBodyParsers}
+import play.api.mvc.{BodyParser, PlayBodyParsers, Results}
 
 import scala.concurrent.ExecutionContext
 
 object RawParser {
   def parser(parser: PlayBodyParsers)(implicit ec: ExecutionContext): BodyParser[Source[ByteString, _]] =
     BodyParser { requestHeader =>
-      parser
-        .raw(requestHeader)
-        .map(_.right.map(rawBuffer => FileIO.fromPath(rawBuffer.asFile.toPath)))
+        parser
+          .raw(requestHeader)
+          .map(_.right.flatMap(rawBuffer =>
+              if(rawBuffer.asFile.exists() && rawBuffer.asFile.canRead)
+                Right(FileIO.fromPath(rawBuffer.asFile.toPath))
+              else
+                Left(Results.InternalServerError("Multipart upload tmp file cannot be read"))
+            )
+          )
     }
 }
