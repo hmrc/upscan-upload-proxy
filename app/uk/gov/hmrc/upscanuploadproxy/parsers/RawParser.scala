@@ -23,16 +23,20 @@ import play.api.mvc.{BodyParser, PlayBodyParsers, Results}
 import scala.concurrent.ExecutionContext
 
 object RawParser {
-  def parser(parser: PlayBodyParsers)(implicit ec: ExecutionContext): BodyParser[Source[ByteString, _]] =
+  def parser(parser: PlayBodyParsers)(implicit ec: ExecutionContext): BodyParser[Either[String, Source[ByteString, _]]] =
     BodyParser { requestHeader =>
         parser
           .raw(requestHeader)
-          .map(_.right.flatMap(rawBuffer =>
+          .map(_.right.map(rawBuffer =>
               if(rawBuffer.asFile.exists() && rawBuffer.asFile.canRead)
                 Right(FileIO.fromPath(rawBuffer.asFile.toPath))
               else
-                Left(Results.InternalServerError("Multipart upload tmp file cannot be read"))
+                Left(s"Multipart tmp file was missing: ${rawBuffer.asFile.getName}")
             )
           )
     }
+
+  def parser2(p: PlayBodyParsers)(implicit ec: ExecutionContext): BodyParser[Source[ByteString, _]] =
+    parser(p).map(_.getOrElse(Source.empty))
+
 }

@@ -2,4 +2,4 @@
 
 ->          /                                    health.Routes
 POST        /v1/uploads/:destination             uk.gov.hmrc.upscanuploadproxy.controllers.UploadController.upload(destination: String)
-OPTIONS     /v1/uploads/:destination             uk.gov.hmrc.upscanuploadproxy.controllers.UploadController.proxy(destination: String)
+OPTIONS     /v1/uploads/:destination             uk.gov.hmrc.upscanuploadproxy.controllers.UploadController.proxyOptions(destination: String)
