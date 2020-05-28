@@ -38,22 +38,23 @@ class UploadController @Inject()(uriGenerator: UploadUriGenerator, proxyService:
     val proxyHeaders = extractS3Headers(request.headers.headers)
     request.body.file.map(file => proxyService.proxy(url, request.withHeaders(Headers(proxyHeaders: _*)), file, ProxyService.toResultEither))
       .fold(
-        err => Future.successful(Response.redirect(request.body.redirectUrl, err)),
-        fb => fb.map {
+        err => Future.successful(InternalServerError(err)),
+        body => body.map {
           case Right(result) => result
-          case Left(err) =>  Response.redirect(request.body.redirectUrl, err)
+          case Left(err)     =>  Response.redirect(request.body.redirectUrl, err)
         })
   }
 
-  def proxyOptions(destination: String) = Action.async(optionsParser) { implicit request =>
+  def proxyOptions(destination: String) = Action.async(rawParser) { implicit request =>
     val url          = uriGenerator.uri(destination)
     val proxyHeaders = extractS3Headers(request.headers.headers)
-    proxyService.proxy(url, request.withHeaders(Headers(proxyHeaders: _*)), request.body, ProxyService.toResult)
+    request.body.fold(
+      err => Future.successful(Response.internalServerError(err)),
+      body => proxyService.proxy(url, request.withHeaders(Headers(proxyHeaders: _*)), body, ProxyService.toResult)
+    )
   }
 
   private val rawParser: BodyParser[Either[String, Source[ByteString, _]]] = RawParser.parser(cc.parsers)
-
-  private val optionsParser: BodyParser[Source[ByteString, _]] = RawParser.parser(cc.parsers).map(_.getOrElse(Source.empty))
 
   private val uploadRequestParser =
     CompositeBodyParser(RedirectUrlWithKeyParser.parser(cc.parsers), rawParser).map(UploadRequest.tupled)

@@ -18,9 +18,10 @@ package uk.gov.hmrc.upscanuploadproxy.parsers
 
 import akka.stream.scaladsl.{FileIO, Source}
 import akka.util.ByteString
-import play.api.mvc.{BodyParser, PlayBodyParsers, Results}
+import play.api.mvc.{BodyParser, PlayBodyParsers}
 
 import scala.concurrent.ExecutionContext
+
 
 object RawParser {
   def parser(parser: PlayBodyParsers)(implicit ec: ExecutionContext): BodyParser[Either[String, Source[ByteString, _]]] =
@@ -31,12 +32,8 @@ object RawParser {
               if(rawBuffer.asFile.exists() && rawBuffer.asFile.canRead)
                 Right(FileIO.fromPath(rawBuffer.asFile.toPath))
               else
-                Left(s"Multipart tmp file was missing: ${rawBuffer.asFile.getName}")
+                Left(s"Multipart tmp file was missing")
             )
           )
     }
-
-  def parser2(p: PlayBodyParsers)(implicit ec: ExecutionContext): BodyParser[Source[ByteString, _]] =
-    parser(p).map(_.getOrElse(Source.empty))
-
 }
