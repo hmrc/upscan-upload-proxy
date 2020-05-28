@@ -45,7 +45,7 @@ class UploadController @Inject()(uriGenerator: UploadUriGenerator, proxyService:
         })
   }
 
-  def proxyOptions(destination: String) = Action.async(rawParser) { implicit request =>
+  def passThrough(destination: String) = Action.async(rawParser) { implicit request =>
     val url          = uriGenerator.uri(destination)
     val proxyHeaders = extractS3Headers(request.headers.headers)
     request.body.fold(

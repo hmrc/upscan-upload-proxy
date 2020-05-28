@@ -34,19 +34,44 @@ class UploadControllerSpec extends AcceptanceSpec with ScalaFutures {
 
   private def resource(path: String): String = s"http://localhost:$port/${-/(path)}"
 
-  private def makeRequest(body: String): WSResponse =
+  private def makeRequest(body: String, bucket: String= "bucketname"): WSResponse =
     wsClient
-      .url(resource("v1/uploads/bucketName"))
+      .url(resource(s"v1/uploads/$bucket"))
       .withHttpHeaders(
         "Content-Type" -> "multipart/form-data; boundary=--------------------------946347039423050176633444")
       .withFollowRedirects(false)
       .post(body)
       .futureValue
 
+  private def makeOptionsRequest(bucket: String= "bucketname"): WSResponse =
+    wsClient
+      .url(resource(s"v1/uploads/$bucket"))
+      .withFollowRedirects(false)
+      .options()
+      .futureValue
+
   implicit override val patienceConfig: PatienceConfig =
     PatienceConfig(scaled(Span(2000, Millis)), scaled(Span(50, Millis)))
 
-  "testHandleRequest" must {
+  "OPTIONS to testHandlerRequest" must {
+
+    "proxy query to S3" in {
+      val body = "OptionsBody"
+      stubForOptions("/s3", 200, body)
+      val response = makeOptionsRequest()
+      response.status mustBe 200
+      response.body mustBe body
+    }
+
+    "disallow invalid bucket names" in {
+      makeOptionsRequest( bucket = "www.baddomain.com%23").status mustBe 404
+      makeOptionsRequest( bucket = "www.baddomain.com%40").status mustBe 404
+      makeOptionsRequest( bucket = "www.baddomain.com%3A").status mustBe 404
+    }
+
+  }
+
+  "POST to testHandleRequest" must {
 
     "proxy response on S3 2xx" in {
       stubForMultipart("/s3", 204)
@@ -137,7 +162,7 @@ class UploadControllerSpec extends AcceptanceSpec with ScalaFutures {
 
       val postBody = readResource("/simple-request")
       val response = wsClient
-        .url(resource("v1/uploads/bucketName"))
+        .url(resource("v1/uploads/bucketname"))
         .withFollowRedirects(false)
         .post(postBody)
         .futureValue
@@ -164,6 +189,17 @@ class UploadControllerSpec extends AcceptanceSpec with ScalaFutures {
       response.status mustBe 400
       response.body mustBe "{\"message\":\"Bad request: Unexpected end of input\"}"
       response.header("Content-Type") mustBe Some("application/json")
+    }
+
+    "ignore invalid bucket names" in {
+
+      val locationHeader = new HttpHeader("Location", "https://www.hmrc.gov.uk?a=a&b=b")
+      stubForMultipart(url = "/s3", status = 303, headers = new HttpHeaders(locationHeader))
+
+      val postBody = readResource("/simple-request")
+      makeRequest(postBody, bucket = "www.baddomain.com%23").status mustBe 404
+      makeRequest(postBody, bucket = "www.baddomain.com%40").status mustBe 404
+      makeRequest(postBody, bucket = "www.baddomain.com%3A").status mustBe 404
     }
   }
 
@@ -201,4 +237,12 @@ class UploadControllerSpec extends AcceptanceSpec with ScalaFutures {
             .withBody(body)
             .withHeaders(headers)
         ))
+
+  def stubForOptions(url: String, status: Integer, body:String): StubMapping =
+    stubFor(options(urlMatching(url))
+      .willReturn(
+        aResponse()
+          .withStatus(status)
+          .withBody(body)
+      ))
 }

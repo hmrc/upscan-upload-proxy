@@ -12,16 +12,16 @@ Enrich the S3 api with the ability to redirect on failure. S3 can only redirect 
 ### POST v1/uploads/{destination}
 
 Expects a `destination` path parameter which should be the S3 bucket name where we want to
-upload the file.
+upload the file. `destination` must meet aws bucket name standards (lowercase, alphanumeric, dot and dash characters only). 
 
-### Headers
+#### Headers
 
 ```$xslt
 Content-Type	multipart/form-data
 Content-Length	xxx
 ```
 
-### Body
+#### Body
 ```$xslt
 error_action_redirect	https://www...
 ``` 
@@ -32,7 +32,7 @@ This service enriches the S3 api to allow a redirect url to be specified for a f
 `error_action_redirect` form field.
 
 
-### Example request
+#### Example request
 
 ```$xslt
 POST v1/uploads/{bucket-name} HTTP/1.1
@@ -107,3 +107,11 @@ curl -X POST \
   -F key=b198de49-e7b5-49a8-83ff-068fc9357481 \
   -F file=@HelloWorld.txt
 ```
+
+### OPTIONS v1/uploads/{destination}
+
+Expects a `destination` path parameter which should be the S3 bucket name. `destination` must meet aws bucket name standards (lowercase, alphanumeric, dot and dash characters only). 
+
+Endpoint proxies the `OPTIONS` request on to the S3 bucket and returns the response. This is implemented to support CORS requests from the client.
+
+  
