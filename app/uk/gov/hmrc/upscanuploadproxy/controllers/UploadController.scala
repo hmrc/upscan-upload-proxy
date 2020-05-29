@@ -38,7 +38,7 @@ class UploadController @Inject()(uriGenerator: UploadUriGenerator, proxyService:
     val proxyHeaders = extractS3Headers(request.headers.headers)
     request.body.file.map(file => proxyService.proxy(url, request.withHeaders(Headers(proxyHeaders: _*)), file, ProxyService.toResultEither))
       .fold(
-        err => Future.successful(InternalServerError(err)),
+        err  => Future.successful(Response.redirect(request.body.redirectUrl, err)),
         body => body.map {
           case Right(result) => result
           case Left(err)     =>  Response.redirect(request.body.redirectUrl, err)
@@ -49,7 +49,7 @@ class UploadController @Inject()(uriGenerator: UploadUriGenerator, proxyService:
     val url          = uriGenerator.uri(destination)
     val proxyHeaders = extractS3Headers(request.headers.headers)
     request.body.fold(
-      err => Future.successful(Response.internalServerError(err)),
+      err  => Future.successful(Response.internalServerError(err)),
       body => proxyService.proxy(url, request.withHeaders(Headers(proxyHeaders: _*)), body, ProxyService.toResult)
     )
   }

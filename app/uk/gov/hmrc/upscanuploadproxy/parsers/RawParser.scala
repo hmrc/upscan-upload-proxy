@@ -24,6 +24,7 @@ import scala.concurrent.ExecutionContext
 
 
 object RawParser {
+
   def parser(parser: PlayBodyParsers)(implicit ec: ExecutionContext): BodyParser[Either[String, Source[ByteString, _]]] =
     BodyParser { requestHeader =>
         parser
@@ -32,7 +33,7 @@ object RawParser {
               if(rawBuffer.asFile.exists() && rawBuffer.asFile.canRead)
                 Right(FileIO.fromPath(rawBuffer.asFile.toPath))
               else
-                Left(s"Multipart tmp file was missing")
+                Left(s"<Error><Message>Multipart tmp file was missing</Message></Error>")
             )
           )
     }
