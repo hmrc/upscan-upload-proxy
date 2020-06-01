@@ -22,11 +22,19 @@ import play.api.mvc.{BodyParser, PlayBodyParsers}
 
 import scala.concurrent.ExecutionContext
 
+
 object RawParser {
-  def parser(parser: PlayBodyParsers)(implicit ec: ExecutionContext): BodyParser[Source[ByteString, _]] =
+
+  def parser(parser: PlayBodyParsers)(implicit ec: ExecutionContext): BodyParser[Either[String, Source[ByteString, _]]] =
     BodyParser { requestHeader =>
-      parser
-        .raw(requestHeader)
-        .map(_.right.map(rawBuffer => FileIO.fromPath(rawBuffer.asFile.toPath)))
+        parser
+          .raw(requestHeader)
+          .map(_.right.map(rawBuffer =>
+              if(rawBuffer.asFile.exists() && rawBuffer.asFile.canRead)
+                Right(FileIO.fromPath(rawBuffer.asFile.toPath))
+              else
+                Left(s"<Error><Message>Multipart tmp file was missing</Message></Error>")
+            )
+          )
     }
 }

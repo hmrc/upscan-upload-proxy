@@ -26,7 +26,7 @@ import uk.gov.hmrc.upscanuploadproxy.model.UploadRequest
 import uk.gov.hmrc.upscanuploadproxy.parsers.{CompositeBodyParser, RawParser, RedirectUrlWithKeyParser}
 import uk.gov.hmrc.upscanuploadproxy.services.ProxyService
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
 
 @Singleton()
 class UploadController @Inject()(uriGenerator: UploadUriGenerator, proxyService: ProxyService, cc: ControllerComponents)(
@@ -36,24 +36,25 @@ class UploadController @Inject()(uriGenerator: UploadUriGenerator, proxyService:
   def upload(destination: String): Action[UploadRequest] = Action.async(uploadRequestParser) { implicit request =>
     val url          = uriGenerator.uri(destination)
     val proxyHeaders = extractS3Headers(request.headers.headers)
-
-    val response = proxyService
-      .proxy(url, request.withHeaders(Headers(proxyHeaders: _*)), request.body.file, ProxyService.toResultEither)
-
-    response.map {
-      case Right(result)      => result
-      case Left(errorMessage) => Response.redirect(request.body.redirectUrl, errorMessage)
-    }
+    request.body.file.map(file => proxyService.proxy(url, request.withHeaders(Headers(proxyHeaders: _*)), file, ProxyService.toResultEither))
+      .fold(
+        err  => Future.successful(Response.redirect(request.body.redirectUrl, err)),
+        body => body.map {
+          case Right(result) => result
+          case Left(err)     =>  Response.redirect(request.body.redirectUrl, err)
+        })
   }
 
-  def proxy(destination: String): Action[Source[ByteString, _]] = Action.async(rawParser) { implicit request =>
+  def passThrough(destination: String) = Action.async(rawParser) { implicit request =>
     val url          = uriGenerator.uri(destination)
     val proxyHeaders = extractS3Headers(request.headers.headers)
-    proxyService
-      .proxy(url, request.withHeaders(Headers(proxyHeaders: _*)), request.body, ProxyService.toResult)
+    request.body.fold(
+      err  => Future.successful(Response.internalServerError(err)),
+      body => proxyService.proxy(url, request.withHeaders(Headers(proxyHeaders: _*)), body, ProxyService.toResult)
+    )
   }
 
-  private val rawParser = RawParser.parser(cc.parsers)
+  private val rawParser: BodyParser[Either[String, Source[ByteString, _]]] = RawParser.parser(cc.parsers)
 
   private val uploadRequestParser =
     CompositeBodyParser(RedirectUrlWithKeyParser.parser(cc.parsers), rawParser).map(UploadRequest.tupled)

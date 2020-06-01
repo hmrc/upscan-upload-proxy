@@ -1,5 +1,5 @@
 # microservice specific routes
 
-->          /                                    health.Routes
-POST        /v1/uploads/:destination             uk.gov.hmrc.upscanuploadproxy.controllers.UploadController.upload(destination: String)
-OPTIONS     /v1/uploads/:destination             uk.gov.hmrc.upscanuploadproxy.controllers.UploadController.proxy(destination: String)
+->          /                                            health.Routes
+POST        /v1/uploads/$destination<[a-z0-9.-]{3,63}> uk.gov.hmrc.upscanuploadproxy.controllers.UploadController.upload(destination: String)
+OPTIONS     /v1/uploads/$destination<[a-z0-9.-]{3,63}> uk.gov.hmrc.upscanuploadproxy.controllers.UploadController.passThrough(destination: String)
