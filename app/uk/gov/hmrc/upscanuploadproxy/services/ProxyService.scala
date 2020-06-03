@@ -16,12 +16,10 @@
 
 package uk.gov.hmrc.upscanuploadproxy.services
 
-import akka.stream.Materializer
 import akka.stream.scaladsl.Source
 import akka.util.ByteString
 import com.google.inject.Singleton
 import javax.inject.Inject
-import org.slf4j.LoggerFactory
 import play.api.Logging
 import play.api.http.Status
 import play.api.libs.ws.{WSClient, WSResponse}
@@ -31,7 +29,7 @@ import scala.concurrent.duration.Duration
 import scala.concurrent.{ExecutionContext, Future}
 
 @Singleton
-class ProxyService @Inject()(wsClient: WSClient)(implicit m: Materializer, ec: ExecutionContext) extends Logging {
+class ProxyService @Inject()(wsClient: WSClient)(implicit ec: ExecutionContext) extends Logging {
 
   def proxy[T](
     url: String,
