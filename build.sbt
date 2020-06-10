@@ -2,6 +2,7 @@ import com.typesafe.sbt.packager.Keys.bashScriptExtraDefines
 import uk.gov.hmrc.DefaultBuildSettings.integrationTestSettings
 import uk.gov.hmrc.SbtArtifactory
 import uk.gov.hmrc.sbtdistributables.SbtDistributablesPlugin.publishingSettings
+import com.typesafe.sbt.packager.docker.DockerChmodType
 
 val appName = "upscan-upload-proxy"
 
@@ -19,3 +20,4 @@ lazy val microservice = Project(appName, file("."))
   .configs(IntegrationTest)
   .settings(integrationTestSettings(): _*)
   .settings(resolvers += Resolver.jcenterRepo)
+  .settings(dockerAdditionalPermissions += (DockerChmodType.UserGroupWriteExecute, "/tmp"))
