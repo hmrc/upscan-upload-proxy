@@ -1,0 +1,22 @@
+----------------------------946347039423050176633444
+Content-Disposition: form-data; name="acl"
+
+public-read-write
+----------------------------946347039423050176633444
+Content-Disposition: form-data; name="Content-Type"
+
+application/text
+----------------------------946347039423050176633444
+Content-Disposition: form-data; name="key"
+
+b198de49-e7b5-49a8-83ff-068fc9357481
+----------------------------946347039423050176633444
+Content-Disposition: form-data; name="error_action_redirect"
+
+https://myservice.com/errorPage
+----------------------------946347039423050176633444
+Content-Disposition: form-data; name="file"; filename="helloworld.txt"
+Content-Type: text/plain
+
+Hello World!
+----------------------------946347039423050176633444--

@@ -36,16 +36,17 @@ class UploadController @Inject()(uriGenerator: UploadUriGenerator, proxyService:
   def upload(destination: String): Action[UploadRequest] = Action.async(uploadRequestParser) { implicit request =>
     val url          = uriGenerator.uri(destination)
     val proxyHeaders = extractS3Headers(request.headers.headers)
-    request.body.file.map(file => proxyService.proxy(url, request.withHeaders(Headers(proxyHeaders: _*)), file, ProxyService.toResultEither))
-      .fold(
-        err  => Future.successful(Response.redirect(request.body.redirectUrl, err)),
-        body => body.map {
-          case Right(result) => result
-          case Left(err)     =>  Response.redirect(request.body.redirectUrl, err)
-        })
+    request.body.errorOrMultipartForm.map { multipartFormData =>
+      proxyService.proxy(url, request.withHeaders(Headers(proxyHeaders: _*)), multipartFormData, ProxyService.toResultEither)
+    }.fold(
+      err  => Future.successful(Response.redirect(request.body.redirectUrl, err)),
+      body => body.map {
+        case Right(result) => result
+        case Left(err)     => Response.redirect(request.body.redirectUrl, err)
+      })
   }
 
-  def passThrough(destination: String) = Action.async(rawParser) { implicit request =>
+  def passThrough(destination: String): Action[Either[String, Source[ByteString, _]]] = Action.async(rawParser) { implicit request =>
     val url          = uriGenerator.uri(destination)
     val proxyHeaders = extractS3Headers(request.headers.headers)
     request.body.fold(
