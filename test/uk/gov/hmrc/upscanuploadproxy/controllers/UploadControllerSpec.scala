@@ -26,6 +26,7 @@ import org.apache.http.message.BasicNameValuePair
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.time.{Millis, Span}
 import play.api.http.Status._
+import play.api.libs.json.Json
 import play.api.libs.ws.{WSRequest, WSResponse}
 import play.mvc.Http.HeaderNames.{CONTENT_TYPE, LOCATION}
 import play.mvc.Http.MimeTypes.JSON
@@ -81,10 +82,14 @@ class UploadControllerSpec extends AcceptanceSpec with ScalaFutures {
 
   "POST to testHandleRequest" must {
 
+    /*
+     * Note that success redirects are handled by AWS not us.
+     * This test is documenting that the field is passed through if set.
+     * We should simply proxy any 2xx or 3xx responses.
+     */
     "proxy response on S3 2xx when upload success redirect is specified" in {
       val expectedMultipartFormData = RequestMultipartFormDataExcludingRedirects ++ Seq(
-        aMultipart("success_action_redirect").withBody(equalTo("https://myservice.com/nextPage")),
-        aMultipart("error_action_redirect").withBody(equalTo("https://myservice.com/errorPage"))
+        aMultipart("success_action_redirect").withBody(equalTo("https://myservice.com/nextPage"))
       )
       stubS3ForPost(expectedMultipartFormData, willReturn = aResponse().withStatus(NO_CONTENT))
 
@@ -93,14 +98,39 @@ class UploadControllerSpec extends AcceptanceSpec with ScalaFutures {
       response.status mustBe NO_CONTENT
     }
 
-    "proxy response on S3 2xx when upload success redirect is omitted" in {
-      val expectedMultipartFormData = RequestMultipartFormDataExcludingRedirects :+
+    /*
+     * This documents current behaviour.
+     * Technically the error_action_redirect field is for us, and does not need to be forwarded onto AWS.
+     */
+    "proxy response on S3 2xx when upload error redirect is specified" in {
+      val expectedMultipartFormData = RequestMultipartFormDataExcludingRedirects ++ Seq(
         aMultipart("error_action_redirect").withBody(equalTo("https://myservice.com/errorPage"))
+      )
       stubS3ForPost(expectedMultipartFormData, willReturn = aResponse().withStatus(NO_CONTENT))
 
-      val response = makeUploadRequest(withBody = readResource("/request-no-success-action-redirect"))
+      val response = makeUploadRequest(withBody = readResource("/request-with-error-action-redirect"))
 
       response.status mustBe NO_CONTENT
+    }
+
+    "proxy response on S3 2xx when both upload success & error redirects are omitted" in {
+      stubS3ForPost(RequestMultipartFormDataExcludingRedirects, willReturn = aResponse().withStatus(NO_CONTENT))
+
+      val response = makeUploadRequest(withBody = readResource("/request-no-action-redirects"))
+
+      response.status mustBe NO_CONTENT
+    }
+
+    // documenting current behaviour which is inconsistent between success & error scenarios
+    "proxy response on S3 2xx retains upstream response headers" in {
+      val headerName = "X-Some-Header-Name"
+      val headerValue = "X-Some-Header-Value"
+      val s3Response = aResponse().withStatus(NO_CONTENT).withHeader(headerName, headerValue)
+      stubS3ForPost(RequestMultipartFormDataExcludingRedirects, willReturn = s3Response)
+
+      val response = makeUploadRequest(withBody = readResource("/request-no-action-redirects"))
+
+      response.header(headerName) must contain (headerValue)
     }
 
     "proxy response on S3 3xx" in {
@@ -115,57 +145,217 @@ class UploadControllerSpec extends AcceptanceSpec with ScalaFutures {
       response.header(LOCATION) must contain (LocationHeaderValue)
     }
 
-    "redirect on S3 4xx" in {
+    // documenting current behaviour which is inconsistent between success & error scenarios
+    "proxy response on S3 3xx retains upstream response headers" in {
+      val headerName = "X-Some-Header-Name"
+      val headerValue = "X-Some-Header-Value"
+      val s3Response = aResponse()
+        .withStatus(SEE_OTHER)
+        .withHeader(LOCATION, "https://www.hmrc.gov.uk?a=a&b=b")
+        .withHeader(headerName, headerValue)
+      stubS3ForPost(RequestMultipartFormDataExcludingRedirects, willReturn = s3Response)
+
+      val response = makeUploadRequest(withBody = readResource("/request-no-action-redirects"))
+
+      response.header(headerName) must contain (headerValue)
+    }
+
+    "redirect on S3 4xx when error redirect is specified" in {
       val expectedMultipartFormData = RequestMultipartFormDataExcludingRedirects :+
         aMultipart("error_action_redirect").withBody(equalTo("https://myservice.com/errorPage"))
-      val s3Response = aResponse().withStatus(BAD_REQUEST).withBody("<Error><Message>failure</Message></Error>")
+      val s3Response = aResponse().withStatus(BAD_REQUEST).withBody(FullAwsError)
       stubS3ForPost(expectedMultipartFormData, willReturn = s3Response)
 
-      val response = makeUploadRequest(withBody = readResource("/request-no-success-action-redirect"))
+      val response = makeUploadRequest(withBody = readResource("/request-with-error-action-redirect"))
       val responseLocationUrl = new URIBuilder(response.header(LOCATION).getOrElse(""))
 
       response.status mustBe SEE_OTHER
       response.body mustBe empty
       responseLocationUrl.getHost mustBe "myservice.com"
+      responseLocationUrl.getPath mustBe "/errorPage"
       responseLocationUrl.getQueryParams.asScala must contain theSameElementsAs Seq(
-        new BasicNameValuePair("errorMessage", "failure"),
-        new BasicNameValuePair("key", "b198de49-e7b5-49a8-83ff-068fc9357481")
+        new BasicNameValuePair("key", "b198de49-e7b5-49a8-83ff-068fc9357481"),
+        new BasicNameValuePair("errorCode", "NoSuchKey"),
+        new BasicNameValuePair("errorMessage", "The resource you requested does not exist"),
+        new BasicNameValuePair("errorResource", "/mybucket/myfoto.jpg"),
+        new BasicNameValuePair("errorRequestId", "4442587FB7D0A2F9")
       )
     }
 
-    "redirect - without query parameter on S3 4xx when response xml can not be parsed" in {
+    // documenting current behaviour which is inconsistent between success & error scenarios
+    "redirect on S3 4xx when error redirect is specified drops any upstream response headers" in {
+      val expectedMultipartFormData = RequestMultipartFormDataExcludingRedirects :+
+        aMultipart("error_action_redirect").withBody(equalTo("https://myservice.com/errorPage"))
+      val headerName = "X-Some-Header-Name"
+      val headerValue = "X-Some-Header-Value"
+      val s3Response = aResponse().withStatus(BAD_REQUEST).withHeader(headerName, headerValue).withBody(FullAwsError)
+      stubS3ForPost(expectedMultipartFormData, willReturn = s3Response)
+
+      val response = makeUploadRequest(withBody = readResource("/request-with-error-action-redirect"))
+
+      response.header(headerName) mustBe empty
+    }
+
+    "proxy status code with error translation on S3 4xx when error redirect is not specified" in {
+      val fullAwsErrorAsJson = Json.parse(
+        """|{
+           | "key": "b198de49-e7b5-49a8-83ff-068fc9357481",
+           | "errorCode": "NoSuchKey",
+           | "errorMessage": "The resource you requested does not exist",
+           | "errorResource": "/mybucket/myfoto.jpg",
+           | "errorRequestId": "4442587FB7D0A2F9"
+           |}""".stripMargin)
+
+      val s3Response = aResponse().withStatus(BAD_REQUEST).withBody(FullAwsError)
+      stubS3ForPost(RequestMultipartFormDataExcludingRedirects, willReturn = s3Response)
+
+      val response = makeUploadRequest(withBody = readResource("/request-no-action-redirects"))
+
+      response.status mustBe BAD_REQUEST
+      response.contentType mustBe JSON
+      Json.parse(response.body) mustBe fullAwsErrorAsJson
+    }
+
+    // documenting current behaviour which is inconsistent between success & error scenarios
+    "proxy status code on S3 4xx when error redirect is not specified drops any upstream response headers" in {
+      val headerName = "X-Some-Header-Name"
+      val headerValue = "X-Some-Header-Value"
+      val s3Response = aResponse().withStatus(BAD_REQUEST).withHeader(headerName, headerValue).withBody(FullAwsError)
+      stubS3ForPost(RequestMultipartFormDataExcludingRedirects, willReturn = s3Response)
+
+      val response = makeUploadRequest(withBody = readResource("/request-no-action-redirects"))
+
+      response.header(headerName) mustBe empty
+    }
+
+    "redirect on S3 4xx when error redirect is specified - without errorMessage query parameter when response xml cannot be parsed" in {
       val expectedMultipartFormData = RequestMultipartFormDataExcludingRedirects :+
         aMultipart("error_action_redirect").withBody(equalTo("https://myservice.com/errorPage"))
       val s3Response = aResponse().withStatus(BAD_REQUEST).withBody("non-xml-body")
       stubS3ForPost(expectedMultipartFormData, willReturn = s3Response)
 
-      val response = makeUploadRequest(withBody = readResource("/request-no-success-action-redirect"))
+      val response = makeUploadRequest(withBody = readResource("/request-with-error-action-redirect"))
       val responseLocationUrl = new URIBuilder(response.header(LOCATION).getOrElse(""))
 
       response.status mustBe SEE_OTHER
       response.body mustBe empty
       responseLocationUrl.getHost mustBe "myservice.com"
+      responseLocationUrl.getPath mustBe "/errorPage"
       responseLocationUrl.getQueryParams.asScala must contain theSameElementsAs Seq(
         new BasicNameValuePair("key", "b198de49-e7b5-49a8-83ff-068fc9357481")
       )
     }
 
-    "redirect on S3 5xx" in {
-      val expectedMultipartFormData = RequestMultipartFormDataExcludingRedirects :+
+    "proxy status code without error details on S3 4xx when error redirect is not specified and response xml cannot be parsed" in {
+      val keyOnlyAsJson = Json.parse(
+        """|{
+           | "key": "b198de49-e7b5-49a8-83ff-068fc9357481"
+           |}""".stripMargin)
+
+      val s3Response = aResponse().withStatus(BAD_REQUEST).withBody("non-xml-body")
+      stubS3ForPost(RequestMultipartFormDataExcludingRedirects, willReturn = s3Response)
+
+      val response = makeUploadRequest(withBody = readResource("/request-no-action-redirects"))
+
+      response.status mustBe BAD_REQUEST
+      response.contentType mustBe JSON
+      Json.parse(response.body) mustBe keyOnlyAsJson
+    }
+
+    /*
+     * This test documents that we do not explicitly do anything to handle a missing upload file.
+     * The only fields of the multipart body we explicitly look at and validate relate to the error redirect URL.
+     * We will happily forward a body without a file, and so rely on AWS to handle this appropriately.
+     */
+    "handle missing file" in {
+      val expectedMultipartFormData = Seq(
+        aMultipart("acl").withBody(equalTo("public-read-write")),
+        aMultipart("Content-Type").withBody(equalTo("application/text")),
+        aMultipart("key").withBody(equalTo("b198de49-e7b5-49a8-83ff-068fc9357481")),
         aMultipart("error_action_redirect").withBody(equalTo("https://myservice.com/errorPage"))
-      val s3Response = aResponse().withStatus(INTERNAL_SERVER_ERROR).withBody("<Error><Message>internal server error</Message></Error>")
+      )
+      val s3Response = aResponse().withStatus(BAD_REQUEST).withBody("<Error><Message>missing file</Message></Error>")
       stubS3ForPost(expectedMultipartFormData, willReturn = s3Response)
 
-      val response = makeUploadRequest(withBody = readResource("/request-no-success-action-redirect"))
+      val response = makeUploadRequest(withBody = readResource("/request-missing-file"))
       val responseLocationUrl = new URIBuilder(response.header(LOCATION).getOrElse(""))
 
       response.status mustBe SEE_OTHER
       response.body mustBe empty
       responseLocationUrl.getHost mustBe "myservice.com"
+      responseLocationUrl.getPath mustBe "/errorPage"
+      responseLocationUrl.getQueryParams.asScala must contain theSameElementsAs Seq(
+        new BasicNameValuePair("errorMessage", "missing file"),
+        new BasicNameValuePair("key", "b198de49-e7b5-49a8-83ff-068fc9357481")
+      )
+    }
+
+    "redirect on S3 5xx when error redirect is specified" in {
+      val expectedMultipartFormData = RequestMultipartFormDataExcludingRedirects :+
+        aMultipart("error_action_redirect").withBody(equalTo("https://myservice.com/errorPage"))
+      val s3Response = aResponse().withStatus(INTERNAL_SERVER_ERROR).withBody("<Error><Message>internal server error</Message></Error>")
+      stubS3ForPost(expectedMultipartFormData, willReturn = s3Response)
+
+      val response = makeUploadRequest(withBody = readResource("/request-with-error-action-redirect"))
+      val responseLocationUrl = new URIBuilder(response.header(LOCATION).getOrElse(""))
+
+      response.status mustBe SEE_OTHER
+      response.body mustBe empty
+      responseLocationUrl.getHost mustBe "myservice.com"
+      responseLocationUrl.getPath mustBe "/errorPage"
       responseLocationUrl.getQueryParams.asScala must contain theSameElementsAs Seq(
         new BasicNameValuePair("errorMessage", "internal server error"),
         new BasicNameValuePair("key", "b198de49-e7b5-49a8-83ff-068fc9357481")
       )
+    }
+
+    "proxy status code with error translation on S3 5xx when error redirect is not specified" in {
+      val s3Response = aResponse().withStatus(INTERNAL_SERVER_ERROR).withBody("<Error><Message>internal server error</Message></Error>")
+      stubS3ForPost(RequestMultipartFormDataExcludingRedirects, willReturn = s3Response)
+      val aAwsErrorAsJson = Json.parse(
+        """|{
+           | "key": "b198de49-e7b5-49a8-83ff-068fc9357481",
+           | "errorMessage": "internal server error"
+           |}""".stripMargin)
+
+      val response = makeUploadRequest(withBody = readResource("/request-no-action-redirects"))
+
+      response.status mustBe INTERNAL_SERVER_ERROR
+      response.contentType mustBe JSON
+      Json.parse(response.body) mustBe aAwsErrorAsJson
+    }
+
+    "redirect on S3 5xx when error redirect is specified - without errorMessage query parameter when response xml cannot be parsed" in {
+      val expectedMultipartFormData = RequestMultipartFormDataExcludingRedirects :+
+        aMultipart("error_action_redirect").withBody(equalTo("https://myservice.com/errorPage"))
+      val s3Response = aResponse().withStatus(SERVICE_UNAVAILABLE).withBody("non-xml-body")
+      stubS3ForPost(expectedMultipartFormData, willReturn = s3Response)
+
+      val response = makeUploadRequest(withBody = readResource("/request-with-error-action-redirect"))
+      val responseLocationUrl = new URIBuilder(response.header(LOCATION).getOrElse(""))
+
+      response.status mustBe SEE_OTHER
+      response.body mustBe empty
+      responseLocationUrl.getHost mustBe "myservice.com"
+      responseLocationUrl.getPath mustBe "/errorPage"
+      responseLocationUrl.getQueryParams.asScala must contain theSameElementsAs Seq(
+        new BasicNameValuePair("key", "b198de49-e7b5-49a8-83ff-068fc9357481")
+      )
+    }
+
+    "proxy status code without error details on S3 5xx when error redirect is not specified and response xml cannot be parsed" in {
+      val keyOnlyAsJson = Json.parse(
+        """|{
+           | "key": "b198de49-e7b5-49a8-83ff-068fc9357481"
+           |}""".stripMargin)
+      val s3Response = aResponse().withStatus(SERVICE_UNAVAILABLE).withBody("non-xml-body")
+      stubS3ForPost(RequestMultipartFormDataExcludingRedirects, willReturn = s3Response)
+
+      val response = makeUploadRequest(withBody = readResource("/request-no-action-redirects"))
+
+      response.status mustBe SERVICE_UNAVAILABLE
+      response.contentType mustBe JSON
+      Json.parse(response.body) mustBe keyOnlyAsJson
     }
 
     "return json error response on missing destination path parameter" in {
@@ -193,19 +383,27 @@ class UploadControllerSpec extends AcceptanceSpec with ScalaFutures {
       response.header(CONTENT_TYPE) must contain (JSON)
     }
 
-    "return json error response when error_action_redirect is missing" in {
-      val response = makeUploadRequest(withBody = readResource("/request-missing-error-action-redirect"))
-
-      response.status mustBe BAD_REQUEST
-      response.body mustBe """{"message":"Could not find error_action_redirect field in request"}"""
-      response.header(CONTENT_TYPE) must contain (JSON)
-    }
-
-    "return json error response when request cannot be parsed" in {
+    "return json error response when request cannot be parsed as a multipart form" in {
       val response = makeUploadRequest(withBody = "cannot be parsed\n")
 
       response.status mustBe BAD_REQUEST
       response.body mustBe """{"message":"Bad request: Unexpected end of input"}"""
+      response.header(CONTENT_TYPE) must contain (JSON)
+    }
+
+    "return json error response when error redirect url is invalid" in {
+      val response = makeUploadRequest(withBody = readResource("/request-invalid-error-action-redirect"))
+
+      response.status mustBe BAD_REQUEST
+      response.body mustBe """{"message":"Unable to build valid redirect URL for error action"}"""
+      response.header(CONTENT_TYPE) must contain (JSON)
+    }
+
+    "return json error response when key is missing" in {
+      val response = makeUploadRequest(withBody = readResource("/request-missing-key"))
+
+      response.status mustBe BAD_REQUEST
+      response.body mustBe """{"message":"Could not find key field in request"}"""
       response.header(CONTENT_TYPE) must contain (JSON)
     }
 
@@ -261,5 +459,14 @@ private object UploadControllerSpec {
   )
 
   val SimpleRequestMultipartFormData = RequestMultipartFormDataExcludingRedirects :+
-    aMultipart("error_action_redirect").withBody(equalTo("https://www.amazon.co.uk"))
+    aMultipart("error_action_redirect").withBody(equalTo("https://myservice.com/errorPage"))
+
+  val FullAwsError =
+    """|<?xml version="1.0" encoding="UTF-8"?>
+       |<Error>
+       |  <Code>NoSuchKey</Code>
+       |  <Message>The resource you requested does not exist</Message>
+       |  <Resource>/mybucket/myfoto.jpg</Resource>
+       |  <RequestId>4442587FB7D0A2F9</RequestId>
+       |</Error>""".stripMargin
 }

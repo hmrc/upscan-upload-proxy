@@ -61,15 +61,19 @@ class ProxyService @Inject()(wsClient: WSClient)(implicit ec: ExecutionContext) 
 object ProxyService {
 
   type SuccessResponse = Result
-  type FailureResponse = String
+  case class FailureResponse(statusCode: Int, body: String)
+
   def toResultEither(response: WSResponse): Either[FailureResponse, SuccessResponse] =
     Either.cond(
       Status.isSuccessful(response.status) || Status.isRedirect(response.status),
-      ProxyService.toResult(response),
-      response.body)
+      toResult(response),
+      toFailureResponse(response))
 
   def toResult(response: WSResponse): Result = {
     val headers = response.headers.toList.flatMap { case (h, v) => v.map((h, _)) }
     Results.Status(response.status)(response.body).withHeaders(headers: _*)
   }
+
+  private def toFailureResponse(response: WSResponse): FailureResponse =
+    FailureResponse(response.status, response.body)
 }

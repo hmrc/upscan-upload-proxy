@@ -22,19 +22,26 @@ import play.api.mvc.{BodyParser, PlayBodyParsers}
 
 import scala.concurrent.ExecutionContext
 
-
+/*
+ * BodyParser[A] has type RequestHeader => Accumulator[ByteString, Either[Result, A]].
+ * The framework will handle returning any Left[Result], which frees the controller Action to focus on the valid body
+ * scenario (Right[A]).  This BodyParser is therefore unusual in that A is itself an Either.
+ *
+ * This is presumably to allow us to send a redirect on error, rather than having the framework respond with an error
+ * status directly.  However, it is not entirely clear what the purpose of the rawBuffer check is here.  It also
+ * neglects to translate any Left[Result] returned from parser.raw - and so not all of this parser's potential errors
+ * can be redirected.
+ */
 object RawParser {
-
   def parser(parser: PlayBodyParsers)(implicit ec: ExecutionContext): BodyParser[Either[String, Source[ByteString, _]]] =
     BodyParser { requestHeader =>
-        parser
-          .raw(requestHeader)
-          .map(_.right.map(rawBuffer =>
-              if(rawBuffer.asFile.exists() && rawBuffer.asFile.canRead)
-                Right(FileIO.fromPath(rawBuffer.asFile.toPath))
-              else
-                Left(s"<Error><Message>Multipart tmp file was missing</Message></Error>")
-            )
-          )
+      parser
+        .raw(requestHeader)
+        .map(_.map { rawBuffer =>
+          if (rawBuffer.asFile.exists() && rawBuffer.asFile.canRead)
+            Right(FileIO.fromPath(rawBuffer.asFile.toPath))
+          else
+            Left("<Error><Message>Multipart tmp file was missing</Message></Error>")
+        })
     }
 }

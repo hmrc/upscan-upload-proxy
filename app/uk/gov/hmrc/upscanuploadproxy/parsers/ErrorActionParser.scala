@@ -16,6 +16,7 @@
 
 package uk.gov.hmrc.upscanuploadproxy.parsers
 
+import java.net.URI
 import java.nio.charset.StandardCharsets.UTF_8
 
 import akka.stream.scaladsl.Sink
@@ -25,17 +26,24 @@ import play.api.mvc.MultipartFormData.FilePart
 import play.api.mvc.{BodyParser, MultipartFormData, PlayBodyParsers, Result}
 import play.core.parsers.Multipart
 import uk.gov.hmrc.upscanuploadproxy.helpers.Response
+import uk.gov.hmrc.upscanuploadproxy.model.ErrorAction
 
 import scala.concurrent.ExecutionContext
 import scala.util.Try
 
-object RedirectUrlWithKeyParser {
+/*
+ * This is a conventional BodyParser implementation that fails parsing with a Left[Result].
+ * This will be handled by the framework, with the implication that the result will be sent directly to the client.
+ * This is OK here because if we fail to parse and construct the error redirect URL we do not have the option to
+ * redirect the error anyway!
+ */
+object ErrorActionParser {
 
-  def parser(parser: PlayBodyParsers)(implicit ec: ExecutionContext): BodyParser[String] =
+  def parser(parser: PlayBodyParsers)(implicit ec: ExecutionContext): BodyParser[ErrorAction] =
     BodyParser { requestHeader =>
-      parser
-        .multipartFormData(fileIgnoreHandler)(requestHeader)
-        .map(_.right.map(extractRedirectWithKey).joinRight)
+      parser.multipartFormData(fileIgnoreHandler)(requestHeader).map { resultOrMultipartForm =>
+        resultOrMultipartForm.flatMap(extractErrorAction)
+      }
     }
 
   private def fileIgnoreHandler(implicit ec: ExecutionContext): Multipart.FilePartHandler[Unit] =
@@ -43,15 +51,17 @@ object RedirectUrlWithKeyParser {
       Accumulator(Sink.ignore)
         .map(_ => FilePart(fileInfo.partName, fileInfo.fileName, fileInfo.contentType, ()))
 
-  private def extractRedirectWithKey(multiPartFormData: MultipartFormData[Unit]): Either[Result, String] =
-    for {
-      redirectUrl <- extractErrorActionRedirect(multiPartFormData).right
-      key <- extractKey(multiPartFormData).right
-      errorActionRedirectUrl <- buildErrorActionRedirectUrl(redirectUrl, key).right
-    } yield errorActionRedirectUrl
+  private def extractErrorAction(multipartFormData: MultipartFormData[Unit]): Either[Result, ErrorAction] = {
+    val maybeErrorActionRedirect = extractErrorActionRedirect(multipartFormData)
+    extractKey(multipartFormData).flatMap { key =>
+      maybeErrorActionRedirect.map { errorActionRedirect =>
+        validateErrorActionRedirectUrlWithKey(errorActionRedirect, key).map(_ => ErrorAction(maybeErrorActionRedirect, key))
+      }.getOrElse(Right(ErrorAction(maybeErrorActionRedirect, key)))
+    }
+  }
 
-  private def extractErrorActionRedirect(multiPartFormData: MultipartFormData[Unit]): Either[Result, String] =
-    extractSingletonFormValue("error_action_redirect", multiPartFormData).toRight(left = missingRedirectUrl)
+  private def extractErrorActionRedirect(multipartFormData: MultipartFormData[Unit]): Option[String] =
+    extractSingletonFormValue("error_action_redirect", multipartFormData)
 
   private def extractKey(multiPartFormData: MultipartFormData[Unit]): Either[Result, String] =
     extractSingletonFormValue("key", multiPartFormData).toRight(left = missingKey)
@@ -61,12 +71,11 @@ object RedirectUrlWithKeyParser {
       .get(key)
       .flatMap(_.headOption)
 
-  private def buildErrorActionRedirectUrl(redirectUrl: String, key: String): Either[Result, String] =
+  private def validateErrorActionRedirectUrlWithKey(redirectUrl: String, key: String): Either[Result, URI] =
     Try {
-      new URIBuilder(redirectUrl, UTF_8).addParameter("key", key).build().toASCIIString
+      new URIBuilder(redirectUrl, UTF_8).addParameter("key", key).build()
     }.toOption.toRight(left = badRedirectUrl)
 
-  private val missingRedirectUrl = Response.badRequest("Could not find error_action_redirect field in request")
   private val missingKey = Response.badRequest("Could not find key field in request")
   private val badRedirectUrl = Response.badRequest("Unable to build valid redirect URL for error action")
 }

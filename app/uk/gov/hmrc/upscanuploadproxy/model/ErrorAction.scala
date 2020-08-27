@@ -16,8 +16,4 @@
 
 package uk.gov.hmrc.upscanuploadproxy.model
 
-import akka.stream.scaladsl.Source
-import akka.util.ByteString
-
-case class UploadRequest(errorAction: ErrorAction,
-                         errorOrMultipartForm: Either[String, Source[ByteString, _]])
+case class ErrorAction(redirectUrl: Option[String], key: String)
