@@ -110,7 +110,7 @@ curl -X POST \
 
 #### Error Reporting
 
-If the S3 file upload attempt fails, the way in which the error is reported to the client service depends upon whether
+If the S3 file upload attempt fails, the way in which the error is reported to the client depends upon whether
 an `error_action_redirect` form field was set.
 
 If set, we will redirect to the specified URL.  Details of the error will be supplied to this URL as query parameters,
