@@ -37,10 +37,10 @@ class XmlErrorResponseSpec extends AnyWordSpecLike with should.Matchers {
 
       "be parseable into fields" in {
         toFields(key = "a-key", xmlMessage) should contain theSameElementsAs Seq(
-          "key" -> "a-key",
-          "errorCode" -> "NoSuchKey",
-          "errorMessage" -> "The resource you requested does not exist",
-          "errorResource" -> "/mybucket/myfoto.jpg",
+          "key"            -> "a-key",
+          "errorCode"      -> "NoSuchKey",
+          "errorMessage"   -> "The resource you requested does not exist",
+          "errorResource"  -> "/mybucket/myfoto.jpg",
           "errorRequestId" -> "4442587FB7D0A2F9"
         )
       }
@@ -67,8 +67,8 @@ class XmlErrorResponseSpec extends AnyWordSpecLike with should.Matchers {
 
       "be parseable into fields" in {
         toFields(key = "a-key", xmlMessage) should contain theSameElementsAs Seq(
-          "key" -> "a-key",
-          "errorCode" -> "NoSuchKey",
+          "key"          -> "a-key",
+          "errorCode"    -> "NoSuchKey",
           "errorMessage" -> "The resource you requested does not exist"
         )
       }
@@ -94,8 +94,8 @@ class XmlErrorResponseSpec extends AnyWordSpecLike with should.Matchers {
 
       "be parseable into fields (silently ignoring unrecognised fields)" in {
         toFields(key = "a-key", xmlMessage) should contain theSameElementsAs Seq(
-          "key" -> "a-key",
-          "errorCode" -> "NoSuchKey",
+          "key"          -> "a-key",
+          "errorCode"    -> "NoSuchKey",
           "errorMessage" -> "The resource you requested does not exist"
         )
       }

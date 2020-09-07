@@ -47,18 +47,21 @@ class UploadController @Inject()(uriGenerator: UploadUriGenerator, proxyService:
    * code.
    */
   def upload(destination: String): Action[UploadRequest] = Action.async(uploadRequestParser) { implicit request =>
-    val url = uriGenerator.uri(destination)
+    val url          = uriGenerator.uri(destination)
     val proxyHeaders = extractS3Headers(request.headers.headers)
-    val failWith = handleFailure(request.body.errorAction) _
+    val failWith     = handleFailure(request.body.errorAction) _
 
     request.body.errorOrMultipartForm.fold(
       bodyParseError => Future.successful(failWith(FailureResponse(INTERNAL_SERVER_ERROR, bodyParseError))),
-      multipartForm  => proxyService.proxy(url, request.withHeaders(Headers(proxyHeaders: _*)), multipartForm, ProxyService.toResultEither).map {
-        _.fold(
-          failure => failWith(failure),
-          success => success
-        )
-      }
+      multipartForm =>
+        proxyService
+          .proxy(url, request.withHeaders(Headers(proxyHeaders: _*)), multipartForm, ProxyService.toResultEither)
+          .map {
+            _.fold(
+              failure => failWith(failure),
+              success => success
+            )
+        }
     )
   }
 
@@ -67,23 +70,28 @@ class UploadController @Inject()(uriGenerator: UploadUriGenerator, proxyService:
    * Otherwise send back the failure status code with a JSON body representing the error if possible.
    */
   private def handleFailure(errorAction: ErrorAction)(failure: FailureResponse): Result =
-    errorAction.redirectUrl.fold(ifEmpty = Response.json(failure.statusCode, XmlErrorResponse.toJson(errorAction.key, failure.body))) { redirectUrl =>
-      Response.redirect(redirectUrl, XmlErrorResponse.toFields(errorAction.key, failure.body))
+    errorAction.redirectUrl.fold(
+      ifEmpty = Response.json(failure.statusCode, XmlErrorResponse.toJson(errorAction.key, failure.body))) {
+      redirectUrl =>
+        Response.redirect(redirectUrl, XmlErrorResponse.toFields(errorAction.key, failure.body))
     }
 
-  def passThrough(destination: String): Action[Either[String, Source[ByteString, _]]] = Action.async(rawParser) { implicit request =>
-    val url = uriGenerator.uri(destination)
-    val proxyHeaders = extractS3Headers(request.headers.headers)
-    request.body.fold(
-      err           => Future.successful(Response.internalServerError(err)),
-      multipartForm => proxyService.proxy(url, request.withHeaders(Headers(proxyHeaders: _*)), multipartForm, ProxyService.toResult)
-    )
+  def passThrough(destination: String): Action[Either[String, Source[ByteString, _]]] = Action.async(rawParser) {
+    implicit request =>
+      val url          = uriGenerator.uri(destination)
+      val proxyHeaders = extractS3Headers(request.headers.headers)
+      request.body.fold(
+        err => Future.successful(Response.internalServerError(err)),
+        multipartForm =>
+          proxyService.proxy(url, request.withHeaders(Headers(proxyHeaders: _*)), multipartForm, ProxyService.toResult)
+      )
   }
 
   private val rawParser: BodyParser[Either[String, Source[ByteString, _]]] = RawParser.parser(cc.parsers)
 
   private val uploadRequestParser: BodyParser[UploadRequest] = CompositeBodyParser(
-    ErrorActionParser.parser(cc.parsers), rawParser
+    ErrorActionParser.parser(cc.parsers),
+    rawParser
   ).map(UploadRequest.tupled)
 
   private val s3Headers = Set("origin", "access-control-request-method", "content-type", "content-length")

@@ -33,7 +33,8 @@ import scala.concurrent.ExecutionContext
  * can be redirected.
  */
 object RawParser {
-  def parser(parser: PlayBodyParsers)(implicit ec: ExecutionContext): BodyParser[Either[String, Source[ByteString, _]]] =
+  def parser(parser: PlayBodyParsers)(
+    implicit ec: ExecutionContext): BodyParser[Either[String, Source[ByteString, _]]] =
     BodyParser { requestHeader =>
       parser
         .raw(requestHeader)

@@ -16,7 +16,6 @@
 
 package uk.gov.hmrc.upscanuploadproxy.services
 
-
 import org.mockito.scalatest.MockitoSugar
 import org.scalatest.EitherValues
 import org.scalatest.matchers.should
@@ -30,9 +29,10 @@ class ProxyServiceSpec extends AnyWordSpecLike with should.Matchers with Mockito
   private trait Fixture {
     val response = mock[WSResponse]
 
-    def stubResponse(withStatus: Int,
-                     withHeaders: Option[Map[String, Seq[String]]] = None,
-                     withBody: String = ""): Unit = {
+    def stubResponse(
+      withStatus: Int,
+      withHeaders: Option[Map[String, Seq[String]]] = None,
+      withBody: String                              = ""): Unit = {
       when(response.status).thenReturn(withStatus)
       withHeaders.foreach(headers => when(response.headers).thenReturn(headers))
       when(response.body).thenReturn(withBody)
@@ -63,7 +63,9 @@ class ProxyServiceSpec extends AnyWordSpecLike with should.Matchers with Mockito
       val errorMessage = "Some Error Message"
       stubResponse(withStatus = INTERNAL_SERVER_ERROR, withBody = errorMessage)
 
-      toResultEither(response).left.value shouldBe FailureResponse(statusCode = INTERNAL_SERVER_ERROR, body = errorMessage)
+      toResultEither(response).left.value shouldBe FailureResponse(
+        statusCode = INTERNAL_SERVER_ERROR,
+        body       = errorMessage)
     }
   }
 }

@@ -54,9 +54,12 @@ object ErrorActionParser {
   private def extractErrorAction(multipartFormData: MultipartFormData[Unit]): Either[Result, ErrorAction] = {
     val maybeErrorActionRedirect = extractErrorActionRedirect(multipartFormData)
     extractKey(multipartFormData).flatMap { key =>
-      maybeErrorActionRedirect.map { errorActionRedirect =>
-        validateErrorActionRedirectUrlWithKey(errorActionRedirect, key).map(_ => ErrorAction(maybeErrorActionRedirect, key))
-      }.getOrElse(Right(ErrorAction(maybeErrorActionRedirect, key)))
+      maybeErrorActionRedirect
+        .map { errorActionRedirect =>
+          validateErrorActionRedirectUrlWithKey(errorActionRedirect, key).map(_ =>
+            ErrorAction(maybeErrorActionRedirect, key))
+        }
+        .getOrElse(Right(ErrorAction(maybeErrorActionRedirect, key)))
     }
   }
 
@@ -76,6 +79,6 @@ object ErrorActionParser {
       new URIBuilder(redirectUrl, UTF_8).addParameter("key", key).build()
     }.toOption.toRight(left = badRedirectUrl)
 
-  private val missingKey = Response.badRequest("Could not find key field in request")
+  private val missingKey     = Response.badRequest("Could not find key field in request")
   private val badRedirectUrl = Response.badRequest("Unable to build valid redirect URL for error action")
 }
