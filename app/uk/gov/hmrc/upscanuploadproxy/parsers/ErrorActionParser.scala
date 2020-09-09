@@ -41,9 +41,7 @@ object ErrorActionParser {
 
   def parser(parser: PlayBodyParsers)(implicit ec: ExecutionContext): BodyParser[ErrorAction] =
     BodyParser { requestHeader =>
-      parser.multipartFormData(fileIgnoreHandler)(requestHeader).map { resultOrMultipartForm =>
-        resultOrMultipartForm.flatMap(extractErrorAction)
-      }
+      parser.multipartFormData(fileIgnoreHandler)(requestHeader).map(_.flatMap(extractErrorAction))
     }
 
   private def fileIgnoreHandler(implicit ec: ExecutionContext): Multipart.FilePartHandler[Unit] =
@@ -51,28 +49,30 @@ object ErrorActionParser {
       Accumulator(Sink.ignore)
         .map(_ => FilePart(fileInfo.partName, fileInfo.fileName, fileInfo.contentType, ()))
 
-  private def extractErrorAction(multipartFormData: MultipartFormData[Unit]): Either[Result, ErrorAction] = {
-    val maybeErrorActionRedirect = extractErrorActionRedirect(multipartFormData)
-    extractKey(multipartFormData).flatMap { key =>
-      maybeErrorActionRedirect
-        .map { errorActionRedirect =>
-          validateErrorActionRedirectUrlWithKey(errorActionRedirect, key).map(_ =>
-            ErrorAction(maybeErrorActionRedirect, key))
-        }
-        .getOrElse(Right(ErrorAction(maybeErrorActionRedirect, key)))
-    }
-  }
-
-  private def extractErrorActionRedirect(multipartFormData: MultipartFormData[Unit]): Option[String] =
-    extractSingletonFormValue("error_action_redirect", multipartFormData)
+  private def extractErrorAction(multipartFormData: MultipartFormData[Unit]): Either[Result, ErrorAction] =
+    for {
+      key              <- extractKey(multipartFormData)
+      maybeRedirectUrl <- Right(extractErrorActionRedirect(multipartFormData))
+      errorAction      <- validateErrorAction(key, maybeRedirectUrl)
+    } yield errorAction
 
   private def extractKey(multiPartFormData: MultipartFormData[Unit]): Either[Result, String] =
     extractSingletonFormValue("key", multiPartFormData).toRight(left = missingKey)
+
+  private def extractErrorActionRedirect(multipartFormData: MultipartFormData[Unit]): Option[String] =
+    extractSingletonFormValue("error_action_redirect", multipartFormData)
 
   private def extractSingletonFormValue(key: String, multiPartFormData: MultipartFormData[Unit]): Option[String] =
     multiPartFormData.dataParts
       .get(key)
       .flatMap(_.headOption)
+
+  private def validateErrorAction(key: String, maybeRedirectUrl: Option[String]): Either[Result, ErrorAction] =
+    maybeRedirectUrl
+      .map {
+        validateErrorActionRedirectUrlWithKey(_, key).map(_ => ErrorAction(maybeRedirectUrl, key))
+      }
+      .getOrElse(Right(ErrorAction(None, key)))
 
   private def validateErrorActionRedirectUrlWithKey(redirectUrl: String, key: String): Either[Result, URI] =
     Try {

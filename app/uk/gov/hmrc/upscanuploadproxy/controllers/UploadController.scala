@@ -35,9 +35,6 @@ class UploadController @Inject()(uriGenerator: UploadUriGenerator, proxyService:
     extends AbstractController(cc) {
 
   /*
-   * Note that the multipart-form is proxied straight through at present (without modification).
-   * This means that the error_action_redirect field (if set) is forwarded onto AWS even though it is intended for us.
-   *
    * Note that there is an inconsistency here in how response headers are handled.
    * A success result passes back any AWS response headers, whereas a failure result does not.
    *
@@ -53,9 +50,9 @@ class UploadController @Inject()(uriGenerator: UploadUriGenerator, proxyService:
 
     request.body.errorOrMultipartForm.fold(
       bodyParseError => Future.successful(failWith(FailureResponse(INTERNAL_SERVER_ERROR, bodyParseError))),
-      multipartForm =>
+      body =>
         proxyService
-          .proxy(url, request.withHeaders(Headers(proxyHeaders: _*)), multipartForm, ProxyService.toResultEither)
+          .proxy(url, request.withHeaders(Headers(proxyHeaders: _*)), body, ProxyService.toResultEither)
           .map {
             _.fold(
               failure => failWith(failure),
