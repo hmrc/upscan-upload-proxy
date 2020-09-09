@@ -41,12 +41,14 @@ trait AcceptanceSpec
   implicit val ec: ExecutionContextExecutor = scala.concurrent.ExecutionContext.global
   protected val wsClient: WSClient          = fakeApplication().injector.instanceOf(classOf[WSClient])
 
+  val S3Path = "/s3"
+
   override def beforeEach(): Unit = {}
 
   override def fakeApplication(): Application = {
 
     val uploadUrlGenerator = new UploadUriGenerator {
-      override def uri(bucketName: String): String = s"$wireMockUrl/s3"
+      override def uri(bucketName: String): String = wireMockUrl + S3Path
     }
 
     new GuiceApplicationBuilder()

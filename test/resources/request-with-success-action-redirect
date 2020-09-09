@@ -11,9 +11,9 @@ Content-Disposition: form-data; name="key"
 
 b198de49-e7b5-49a8-83ff-068fc9357481
 ----------------------------946347039423050176633444
-Content-Disposition: form-data; name="error_action_redirect"
+Content-Disposition: form-data; name="success_action_redirect"
 
-https://myservice.com/errorPage
+https://myservice.com/nextPage
 ----------------------------946347039423050176633444
 Content-Disposition: form-data; name="file"; filename="helloworld.txt"
 Content-Type: text/plain

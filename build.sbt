@@ -8,7 +8,7 @@ val appName = "upscan-upload-proxy"
 
 lazy val microservice = Project(appName, file("."))
   .enablePlugins(play.sbt.PlayScala, SbtAutoBuildPlugin, GitVersioning, SbtDistributablesPlugin, SbtArtifactory)
-  .settings(scalaVersion := "2.12.8")
+  .settings(scalaVersion := "2.12.12")
   .settings(
     libraryDependencies              ++= AppDependencies.compile ++ AppDependencies.test
   )

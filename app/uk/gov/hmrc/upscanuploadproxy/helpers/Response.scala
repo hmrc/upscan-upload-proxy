@@ -15,46 +15,32 @@
  */
 
 package uk.gov.hmrc.upscanuploadproxy.helpers
+
 import org.apache.http.client.utils.URIBuilder
-import play.api.http.Status
-import play.api.libs.json.Json
+import play.api.libs.json.{JsValue, Json}
+import play.api.mvc.Results.{BadRequest, InternalServerError, NotFound}
 import play.api.mvc.{Result, Results}
 import uk.gov.hmrc.upscanuploadproxy.model.ErrorResponse
-
-import scala.util.Try
-import scala.xml.Elem
 
 object Response {
 
   def badRequest(message: String): Result =
-    Results.BadRequest(Json.toJson(ErrorResponse(message))(ErrorResponse.writes))
+    BadRequest(Json.toJson(ErrorResponse(message))(ErrorResponse.writes))
 
   def notFound(message: String): Result =
-    Results.NotFound(Json.toJson(ErrorResponse(message))(ErrorResponse.writes))
+    NotFound(Json.toJson(ErrorResponse(message))(ErrorResponse.writes))
 
   def internalServerError(message: String): Result =
-    Results.InternalServerError(Json.toJson(ErrorResponse(message))(ErrorResponse.writes))
+    InternalServerError(Json.toJson(ErrorResponse(message))(ErrorResponse.writes))
 
-  private def getErrorParameter(elemType: String, xml: Elem): Option[(String, String)] =
-    (xml \ elemType).headOption.map(node => s"error$elemType" -> node.text)
-
-  private def errorParamsList(body: String): List[(String, String)] =
-    Try(scala.xml.XML.loadString(body)).toOption.toList.flatMap { xml =>
-      val requestId = getErrorParameter("RequestId", xml)
-      val resource  = getErrorParameter("Resource", xml)
-      val message   = getErrorParameter("Message", xml)
-      val code      = getErrorParameter("Code", xml)
-
-      List(code, message, resource, requestId).flatten
+  def redirect(url: String, queryParams: Seq[(String, String)]): Result = {
+    val urlBuilder = queryParams.foldLeft(new URIBuilder(url)) { (urlBuilder, param) =>
+      urlBuilder.addParameter(param._1, param._2)
     }
 
-  def redirect(url: String, body: String): Result = {
-    val errors = errorParamsList(body)
-    val urlBuilder = errors.foldLeft(new URIBuilder(url)) { (urlBuilder, error) =>
-      urlBuilder.addParameter(error._1, error._2)
-    }
-
-    Results.Redirect(urlBuilder.build().toASCIIString, Status.SEE_OTHER)
+    Results.SeeOther(urlBuilder.build().toASCIIString)
   }
 
+  def json(statusCode: Int, body: JsValue): Result =
+    Results.Status(statusCode)(body)
 }

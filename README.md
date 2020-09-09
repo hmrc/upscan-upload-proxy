@@ -26,9 +26,9 @@ Content-Length	xxx
 error_action_redirect	https://www...
 ``` 
 
-S3 allows a redirect url to be specified for successful file upload via a `success_action_redirect` form field.
+S3 allows a redirect url to be specified for a successful file upload via the optional `success_action_redirect` form field.
  
-This service enriches the S3 api to allow a redirect url to be specified for a failed file upload via a 
+This service enriches the S3 api to allow a redirect url to be specified for a failed file upload via the optional 
 `error_action_redirect` form field.
 
 
@@ -108,10 +108,39 @@ curl -X POST \
   -F file=@HelloWorld.txt
 ```
 
+#### Error Reporting
+
+If the S3 file upload attempt fails, the way in which the error is reported to the client depends upon whether
+an `error_action_redirect` form field was set.
+
+If set, we will redirect to the specified URL.  Details of the error will be supplied to this URL as query parameters,
+with the names `errorCode`, `errorMessage`, `errorResource` and `errorRequestId`.
+
+The query parameter named `key` contains the globally unique file reference that was allocated by the initiate request 
+to identify the upload.
+
+```
+HTTP Response Code: 303
+Header ("Location" -> "https://myservice.com/errorPage?key=11370e18-6e24-453e-b45a-76d3e32ea33d&errorCode=NoSuchKey&errorMessage=The+resource+you+requested+does+not+exist&errorResource=/mybucket/myfoto.jpg&errorRequestId=4442587FB7D0A2F9")
+```
+
+If a redirect URL is not set, we will respond with the failure status code.
+The details of the error along with the key will be available from the JSON body that has the following structure:
+
+```
+{
+ "key": "11370e18-6e24-453e-b45a-76d3e32ea33d",
+ "errorCode": "NoSuchKey",
+ "errorMessage": "The resource you requested does not exist",
+ "errorResource": "/mybucket/myfoto.jpg",
+ "errorRequestId": "4442587FB7D0A2F9"
+}
+```
+
+All error fields are optional.
+
 ### OPTIONS v1/uploads/{destination}
 
 Expects a `destination` path parameter which should be the S3 bucket name. `destination` must meet aws bucket name standards (lowercase, alphanumeric, dot and dash characters only). 
 
 Endpoint proxies the `OPTIONS` request on to the S3 bucket and returns the response. This is implemented to support CORS requests from the client.
-
-  
