@@ -21,10 +21,12 @@ import java.nio.charset.StandardCharsets.UTF_8
 
 import akka.stream.scaladsl.Sink
 import org.apache.http.client.utils.URIBuilder
+import play.api.Logger
 import play.api.libs.streams.Accumulator
 import play.api.mvc.MultipartFormData.FilePart
-import play.api.mvc.{BodyParser, MultipartFormData, PlayBodyParsers, Result}
+import play.api.mvc._
 import play.core.parsers.Multipart
+
 import uk.gov.hmrc.upscanuploadproxy.helpers.Response
 import uk.gov.hmrc.upscanuploadproxy.model.ErrorAction
 
@@ -39,9 +41,25 @@ import scala.util.Try
  */
 object ErrorActionParser {
 
+  private val logger = Logger(this.getClass)
+
   def parser(parser: PlayBodyParsers)(implicit ec: ExecutionContext): BodyParser[ErrorAction] =
     BodyParser { requestHeader =>
-      parser.multipartFormData(fileIgnoreHandler)(requestHeader).map(_.flatMap(extractErrorAction))
+      parser
+        .multipartFormData(fileIgnoreHandler)(requestHeader)
+        .map(_.flatMap { multiformPartData =>
+          val logErrorFn = logFailedRequest(requestHeader, multiformPartData) _
+          (extractErrorAction _ andThen logErrorFn)(multiformPartData)
+        })
+    }
+
+  private def logFailedRequest[A](requestHeader: play.api.mvc.RequestHeader, multipartFormData: MultipartFormData[A])(
+    errorAction: Either[Result, ErrorAction]): Either[Result, ErrorAction] =
+    Function.const(errorAction) {
+      errorAction.left.foreach { _ =>
+        logger.info(s"Failed request - \n Headers:\n${requestHeader.headers.toSimpleMap
+          .mkString("\n")}\n Data Parts:\n${multipartFormData.dataParts.keySet.mkString("\n")}")
+      }
     }
 
   private def fileIgnoreHandler(implicit ec: ExecutionContext): Multipart.FilePartHandler[Unit] =
