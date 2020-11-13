@@ -28,9 +28,10 @@ import org.scalatest.time.{Millis, Span}
 import play.api.http.Status._
 import play.api.libs.json.Json
 import play.api.libs.ws.{WSRequest, WSResponse}
-import play.mvc.Http.HeaderNames.{CONTENT_TYPE, LOCATION}
-import play.mvc.Http.MimeTypes.JSON
+import play.mvc.Http.HeaderNames.{CONTENT_LENGTH, CONTENT_TYPE, ETAG, LOCATION}
+import play.mvc.Http.MimeTypes.{JSON, XML}
 import uk.gov.hmrc.integration.UrlHelper.-/
+import wiremock.org.apache.http.HttpHeaders.TRANSFER_ENCODING
 
 import scala.collection.JavaConverters._
 import scala.io.Source
@@ -39,7 +40,7 @@ class UploadControllerSpec extends AcceptanceSpec with ScalaFutures {
 
   import UploadControllerSpec._
 
-  private def makeUploadRequest(withBody: String, bucket: String= "bucketname"): WSResponse =
+  private def makeUploadRequest(withBody: String, bucket: String = "bucketname"): WSResponse =
     createRequest(bucket)
       .withHttpHeaders(CONTENT_TYPE -> MultipartFormDataContentTypeHeaderValue)
       .post(withBody)
@@ -121,8 +122,7 @@ class UploadControllerSpec extends AcceptanceSpec with ScalaFutures {
       response.status mustBe NO_CONTENT
     }
 
-    // documenting current behaviour which is inconsistent between success & error scenarios
-    "proxy response on S3 2xx retains upstream response headers" in {
+    "proxy response on S3 2xx retaining upstream response headers" in {
       val headerName = "X-Some-Header-Name"
       val headerValue = "X-Some-Header-Value"
       val s3Response = aResponse().withStatus(NO_CONTENT).withHeader(headerName, headerValue)
@@ -145,8 +145,7 @@ class UploadControllerSpec extends AcceptanceSpec with ScalaFutures {
       response.header(LOCATION) must contain (LocationHeaderValue)
     }
 
-    // documenting current behaviour which is inconsistent between success & error scenarios
-    "proxy response on S3 3xx retains upstream response headers" in {
+    "proxy response on S3 3xx retaining upstream response headers" in {
       val headerName = "X-Some-Header-Name"
       val headerValue = "X-Some-Header-Value"
       val s3Response = aResponse()
@@ -163,7 +162,7 @@ class UploadControllerSpec extends AcceptanceSpec with ScalaFutures {
     "redirect on S3 4xx when error redirect is specified" in {
       val expectedMultipartFormData = RequestMultipartFormDataExcludingRedirects :+
         aMultipart("error_action_redirect").withBody(equalTo("https://myservice.com/errorPage"))
-      val s3Response = aResponse().withStatus(BAD_REQUEST).withBody(FullAwsError)
+      val s3Response = aResponse().withStatus(BAD_REQUEST).withHeader(CONTENT_TYPE, XML).withBody(FullAwsError)
       stubS3ForPost(expectedMultipartFormData, willReturn = s3Response)
 
       val response = makeUploadRequest(withBody = readResource("/request-with-error-action-redirect"))
@@ -182,18 +181,30 @@ class UploadControllerSpec extends AcceptanceSpec with ScalaFutures {
       )
     }
 
-    // documenting current behaviour which is inconsistent between success & error scenarios
-    "redirect on S3 4xx when error redirect is specified drops any upstream response headers" in {
+    "redirect on S3 4xx when error redirect is specified retaining allowed upstream response headers" in {
       val expectedMultipartFormData = RequestMultipartFormDataExcludingRedirects :+
         aMultipart("error_action_redirect").withBody(equalTo("https://myservice.com/errorPage"))
-      val headerName = "X-Some-Header-Name"
-      val headerValue = "X-Some-Header-Value"
-      val s3Response = aResponse().withStatus(BAD_REQUEST).withHeader(headerName, headerValue).withBody(FullAwsError)
+      val xAmzIdHeaderValue = "some-aws-id"
+      val accessControlAllowOriginHeaderValue = "https://myservice.com"
+      val s3Response = aResponse()
+        .withStatus(BAD_REQUEST)
+        .withHeader(CONTENT_TYPE, XML)
+        .withHeader(TRANSFER_ENCODING, ChunkedTransferEncoding)
+        .withHeader(ETAG, "some-etag")
+        .withHeader(XAmzId, xAmzIdHeaderValue)
+        .withHeader(AccessControlAllowOrigin, accessControlAllowOriginHeaderValue)
+        .withBody(FullAwsError)
       stubS3ForPost(expectedMultipartFormData, willReturn = s3Response)
 
       val response = makeUploadRequest(withBody = readResource("/request-with-error-action-redirect"))
 
-      response.header(headerName) mustBe empty
+      // retain allowed AWS response headers
+      response.header(XAmzId) must contain(xAmzIdHeaderValue)
+      response.header(AccessControlAllowOrigin) must contain(accessControlAllowOriginHeaderValue)
+      // redirect has no body so any AWS response headers relating to the content must be excluded
+      response.headers must not contain key (CONTENT_TYPE)
+      response.headers must not contain key (TRANSFER_ENCODING)
+      response.headers must not contain key (ETAG)
     }
 
     "proxy status code with error translation on S3 4xx when error redirect is not specified" in {
@@ -206,7 +217,7 @@ class UploadControllerSpec extends AcceptanceSpec with ScalaFutures {
            | "errorRequestId": "4442587FB7D0A2F9"
            |}""".stripMargin)
 
-      val s3Response = aResponse().withStatus(BAD_REQUEST).withBody(FullAwsError)
+      val s3Response = aResponse().withStatus(BAD_REQUEST).withHeader(CONTENT_TYPE, XML).withBody(FullAwsError)
       stubS3ForPost(RequestMultipartFormDataExcludingRedirects, willReturn = s3Response)
 
       val response = makeUploadRequest(withBody = readResource("/request-no-action-redirects"))
@@ -216,22 +227,35 @@ class UploadControllerSpec extends AcceptanceSpec with ScalaFutures {
       Json.parse(response.body) mustBe fullAwsErrorAsJson
     }
 
-    // documenting current behaviour which is inconsistent between success & error scenarios
-    "proxy status code on S3 4xx when error redirect is not specified drops any upstream response headers" in {
-      val headerName = "X-Some-Header-Name"
-      val headerValue = "X-Some-Header-Value"
-      val s3Response = aResponse().withStatus(BAD_REQUEST).withHeader(headerName, headerValue).withBody(FullAwsError)
+    "proxy status code with error translation on S3 4xx when error redirect is not specified retaining allowed upstream response headers" in {
+      val xAmzIdHeaderValue = "some-aws-id"
+      val accessControlAllowOriginHeaderValue = "https://myservice.com"
+      val s3Response = aResponse()
+        .withStatus(BAD_REQUEST)
+        .withHeader(CONTENT_TYPE, XML)
+        .withHeader(TRANSFER_ENCODING, ChunkedTransferEncoding)
+        .withHeader(ETAG, "some-etag")
+        .withHeader(XAmzId, xAmzIdHeaderValue)
+        .withHeader(AccessControlAllowOrigin, accessControlAllowOriginHeaderValue)
+        .withBody(FullAwsError)
       stubS3ForPost(RequestMultipartFormDataExcludingRedirects, willReturn = s3Response)
 
       val response = makeUploadRequest(withBody = readResource("/request-no-action-redirects"))
 
-      response.header(headerName) mustBe empty
+      // retain allowed AWS response headers
+      response.header(XAmzId) must contain(xAmzIdHeaderValue)
+      response.header(AccessControlAllowOrigin) must contain(accessControlAllowOriginHeaderValue)
+      // content-related headers must reflect our adapted payload not the AWS body
+      response.contentType mustBe JSON
+      response.headers must contain key CONTENT_LENGTH
+      response.headers must not contain key (TRANSFER_ENCODING)
+      response.headers must not contain key (ETAG)
     }
 
     "redirect on S3 4xx when error redirect is specified - without errorMessage query parameter when response xml cannot be parsed" in {
       val expectedMultipartFormData = RequestMultipartFormDataExcludingRedirects :+
         aMultipart("error_action_redirect").withBody(equalTo("https://myservice.com/errorPage"))
-      val s3Response = aResponse().withStatus(BAD_REQUEST).withBody("non-xml-body")
+      val s3Response = aResponse().withStatus(BAD_REQUEST).withHeader(CONTENT_TYPE, XML).withBody("non-xml-body")
       stubS3ForPost(expectedMultipartFormData, willReturn = s3Response)
 
       val response = makeUploadRequest(withBody = readResource("/request-with-error-action-redirect"))
@@ -252,7 +276,7 @@ class UploadControllerSpec extends AcceptanceSpec with ScalaFutures {
            | "key": "b198de49-e7b5-49a8-83ff-068fc9357481"
            |}""".stripMargin)
 
-      val s3Response = aResponse().withStatus(BAD_REQUEST).withBody("non-xml-body")
+      val s3Response = aResponse().withStatus(BAD_REQUEST).withHeader(CONTENT_TYPE, XML).withBody("non-xml-body")
       stubS3ForPost(RequestMultipartFormDataExcludingRedirects, willReturn = s3Response)
 
       val response = makeUploadRequest(withBody = readResource("/request-no-action-redirects"))
@@ -293,7 +317,10 @@ class UploadControllerSpec extends AcceptanceSpec with ScalaFutures {
     "redirect on S3 5xx when error redirect is specified" in {
       val expectedMultipartFormData = RequestMultipartFormDataExcludingRedirects :+
         aMultipart("error_action_redirect").withBody(equalTo("https://myservice.com/errorPage"))
-      val s3Response = aResponse().withStatus(INTERNAL_SERVER_ERROR).withBody("<Error><Message>internal server error</Message></Error>")
+      val s3Response = aResponse()
+        .withStatus(INTERNAL_SERVER_ERROR)
+        .withHeader(CONTENT_TYPE, XML)
+        .withBody("<Error><Message>internal server error</Message></Error>")
       stubS3ForPost(expectedMultipartFormData, willReturn = s3Response)
 
       val response = makeUploadRequest(withBody = readResource("/request-with-error-action-redirect"))
@@ -309,8 +336,37 @@ class UploadControllerSpec extends AcceptanceSpec with ScalaFutures {
       )
     }
 
+    "redirect on S3 5xx when error redirect is specified retaining allowed upstream response headers" in {
+      val expectedMultipartFormData = RequestMultipartFormDataExcludingRedirects :+
+        aMultipart("error_action_redirect").withBody(equalTo("https://myservice.com/errorPage"))
+      val xAmzIdHeaderValue = "some-aws-id"
+      val accessControlAllowOriginHeaderValue = "https://myservice.com"
+      val s3Response = aResponse()
+        .withStatus(INTERNAL_SERVER_ERROR)
+        .withHeader(CONTENT_TYPE, XML)
+        .withHeader(TRANSFER_ENCODING, ChunkedTransferEncoding)
+        .withHeader(ETAG, "some-etag")
+        .withHeader(XAmzId, xAmzIdHeaderValue)
+        .withHeader(AccessControlAllowOrigin, accessControlAllowOriginHeaderValue)
+        .withBody("<Error><Message>internal server error</Message></Error>")
+      stubS3ForPost(expectedMultipartFormData, willReturn = s3Response)
+
+      val response = makeUploadRequest(withBody = readResource("/request-with-error-action-redirect"))
+
+      // retain allowed AWS response headers
+      response.header(XAmzId) must contain(xAmzIdHeaderValue)
+      response.header(AccessControlAllowOrigin) must contain(accessControlAllowOriginHeaderValue)
+      // redirect has no body so any AWS response headers relating to the content must be excluded
+      response.headers must not contain key (CONTENT_TYPE)
+      response.headers must not contain key (TRANSFER_ENCODING)
+      response.headers must not contain key (ETAG)
+    }
+
     "proxy status code with error translation on S3 5xx when error redirect is not specified" in {
-      val s3Response = aResponse().withStatus(INTERNAL_SERVER_ERROR).withBody("<Error><Message>internal server error</Message></Error>")
+      val s3Response = aResponse()
+        .withStatus(INTERNAL_SERVER_ERROR)
+        .withHeader(CONTENT_TYPE, XML)
+        .withBody("<Error><Message>internal server error</Message></Error>")
       stubS3ForPost(RequestMultipartFormDataExcludingRedirects, willReturn = s3Response)
       val aAwsErrorAsJson = Json.parse(
         """|{
@@ -325,10 +381,35 @@ class UploadControllerSpec extends AcceptanceSpec with ScalaFutures {
       Json.parse(response.body) mustBe aAwsErrorAsJson
     }
 
+    "proxy status code with error translation on S3 5xx when error redirect is not specified retaining allowed upstream response headers" in {
+      val xAmzIdHeaderValue = "some-aws-id"
+      val accessControlAllowOriginHeaderValue = "https://myservice.com"
+      val s3Response = aResponse()
+        .withStatus(INTERNAL_SERVER_ERROR)
+        .withHeader(CONTENT_TYPE, XML)
+        .withHeader(TRANSFER_ENCODING, ChunkedTransferEncoding)
+        .withHeader(ETAG, "some-etag")
+        .withHeader(XAmzId, xAmzIdHeaderValue)
+        .withHeader(AccessControlAllowOrigin, accessControlAllowOriginHeaderValue)
+        .withBody("<Error><Message>internal server error</Message></Error>")
+      stubS3ForPost(RequestMultipartFormDataExcludingRedirects, willReturn = s3Response)
+
+      val response = makeUploadRequest(withBody = readResource("/request-no-action-redirects"))
+
+      // retain allowed AWS response headers
+      response.header(XAmzId) must contain(xAmzIdHeaderValue)
+      response.header(AccessControlAllowOrigin) must contain (accessControlAllowOriginHeaderValue)
+      // content-related headers which must reflect our adapted payload not the AWS body
+      response.contentType mustBe JSON
+      response.headers must contain key CONTENT_LENGTH
+      response.headers must not contain key (TRANSFER_ENCODING)
+      response.headers must not contain key (ETAG)
+    }
+
     "redirect on S3 5xx when error redirect is specified - without errorMessage query parameter when response xml cannot be parsed" in {
       val expectedMultipartFormData = RequestMultipartFormDataExcludingRedirects :+
         aMultipart("error_action_redirect").withBody(equalTo("https://myservice.com/errorPage"))
-      val s3Response = aResponse().withStatus(SERVICE_UNAVAILABLE).withBody("non-xml-body")
+      val s3Response = aResponse().withStatus(SERVICE_UNAVAILABLE).withHeader(CONTENT_TYPE, XML).withBody("non-xml-body")
       stubS3ForPost(expectedMultipartFormData, willReturn = s3Response)
 
       val response = makeUploadRequest(withBody = readResource("/request-with-error-action-redirect"))
@@ -348,7 +429,7 @@ class UploadControllerSpec extends AcceptanceSpec with ScalaFutures {
         """|{
            | "key": "b198de49-e7b5-49a8-83ff-068fc9357481"
            |}""".stripMargin)
-      val s3Response = aResponse().withStatus(SERVICE_UNAVAILABLE).withBody("non-xml-body")
+      val s3Response = aResponse().withStatus(SERVICE_UNAVAILABLE).withHeader(CONTENT_TYPE, XML).withBody("non-xml-body")
       stubS3ForPost(RequestMultipartFormDataExcludingRedirects, willReturn = s3Response)
 
       val response = makeUploadRequest(withBody = readResource("/request-no-action-redirects"))
@@ -435,7 +516,7 @@ class UploadControllerSpec extends AcceptanceSpec with ScalaFutures {
     stubFor(postMultipartFormDataWillReturn)
   }
 
-  private def stubS3ForOptions(responseStatus: Int, responseBody:String): StubMapping =
+  private def stubS3ForOptions(responseStatus: Int, responseBody: String): StubMapping =
     stubFor(options(urlEqualTo(S3Path))
       .willReturn(
         aResponse()
@@ -469,4 +550,8 @@ private object UploadControllerSpec {
        |  <Resource>/mybucket/myfoto.jpg</Resource>
        |  <RequestId>4442587FB7D0A2F9</RequestId>
        |</Error>""".stripMargin
+
+  val AccessControlAllowOrigin = "Access-Control-Allow-Origin"
+  val XAmzId = "x-amz-id-2"
+  val ChunkedTransferEncoding = "chunked"
 }

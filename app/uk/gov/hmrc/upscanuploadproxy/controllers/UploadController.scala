@@ -35,9 +35,6 @@ class UploadController @Inject()(uriGenerator: UploadUriGenerator, proxyService:
     extends AbstractController(cc) {
 
   /*
-   * Note that there is an inconsistency here in how response headers are handled.
-   * A success result passes back any AWS response headers, whereas a failure result does not.
-   *
    * If the BodyParser returns a Left[Result] then that will be returned directly to the client by the framework.
    * If it returns an UploadRequest that contains a Left[String] we treat that as an Internal Server Error for
    * consistency with the existing approach in `passThrough`, although this seems a questionable choice of status
@@ -66,12 +63,13 @@ class UploadController @Inject()(uriGenerator: UploadUriGenerator, proxyService:
    * If the client supplied an error action redirect url, redirect passing the error details as query params.
    * Otherwise send back the failure status code with a JSON body representing the error if possible.
    */
-  private def handleFailure(errorAction: ErrorAction)(failure: FailureResponse): Result =
-    errorAction.redirectUrl.fold(
-      ifEmpty = Response.json(failure.statusCode, XmlErrorResponse.toJson(errorAction.key, failure.body))) {
-      redirectUrl =>
-        Response.redirect(redirectUrl, XmlErrorResponse.toFields(errorAction.key, failure.body))
+  private def handleFailure(errorAction: ErrorAction)(failure: FailureResponse): Result = {
+    val result = errorAction.redirectUrl.fold(
+      ifEmpty = Response.json(failure.statusCode, body = XmlErrorResponse.toJson(errorAction.key, failure.body))) {
+      redirectUrl => Response.redirect(redirectUrl, queryParams = XmlErrorResponse.toFields(errorAction.key, failure.body))
     }
+    result.withHeaders(failure.headers: _*)
+  }
 
   def passThrough(destination: String): Action[Either[String, Source[ByteString, _]]] = Action.async(rawParser) {
     implicit request =>

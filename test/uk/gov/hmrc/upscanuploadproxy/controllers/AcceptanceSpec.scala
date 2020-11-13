@@ -17,7 +17,6 @@
 package uk.gov.hmrc.upscanuploadproxy.controllers
 
 import org.mockito.scalatest.MockitoSugar
-import org.scalatest.BeforeAndAfterEach
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 import org.scalatestplus.play.guice.GuiceOneServerPerSuite
@@ -35,15 +34,12 @@ trait AcceptanceSpec
     with Matchers
     with GuiceOneServerPerSuite
     with MockitoSugar
-    with BeforeAndAfterEach
     with WireMockHelper {
 
   implicit val ec: ExecutionContextExecutor = scala.concurrent.ExecutionContext.global
   protected val wsClient: WSClient          = fakeApplication().injector.instanceOf(classOf[WSClient])
 
   val S3Path = "/s3"
-
-  override def beforeEach(): Unit = {}
 
   override def fakeApplication(): Application = {
 

@@ -58,10 +58,16 @@ class ProxyService @Inject()(wsClient: WSClient)(implicit ec: ExecutionContext) 
   }
 }
 
+/*
+ * An AWS Success response has no body (it will be either a 204 or 303) and so any response headers can be safely
+ * passed on as we proxy the response.  An AWS Error response does have a body, which we will either omit or translate
+ * as we proxy the response.  Consequently, we cannot simply forward all response headers in the Error case.  Instead,
+ * we implement an 'allow list' here, and only forward CORS-related headers or custom Amazon headers.
+ */
 object ProxyService {
 
   type SuccessResponse = Result
-  case class FailureResponse(statusCode: Int, body: String)
+  case class FailureResponse(statusCode: Int, body: String, headers: Seq[(String, String)] = Seq.empty)
 
   def toResultEither(response: WSResponse): Either[FailureResponse, SuccessResponse] =
     Either.cond(
@@ -69,11 +75,21 @@ object ProxyService {
       toResult(response),
       toFailureResponse(response))
 
-  def toResult(response: WSResponse): Result = {
-    val headers = response.headers.toList.flatMap { case (h, v) => v.map((h, _)) }
-    Results.Status(response.status)(response.body).withHeaders(headers: _*)
+  def toResult(response: WSResponse): Result =
+    Results.Status(response.status)(response.body).withHeaders(headersFrom(response): _*)
+
+  private def toFailureResponse(response: WSResponse): FailureResponse = {
+    val exposableHeaders = headersFrom(response).filter { case (name, _) => isCorsResponseHeader(name) || isAmazonHeader(name) }
+    FailureResponse(response.status, response.body, exposableHeaders)
   }
 
-  private def toFailureResponse(response: WSResponse): FailureResponse =
-    FailureResponse(response.status, response.body)
+  private def headersFrom(response: WSResponse): Seq[(String, String)] =
+    response.headers.toSeq.flatMap { case (h, v) => v.map((h, _)) }
+
+  // CORS response headers are defined at: https://fetch.spec.whatwg.org/#http-responses
+  private def isCorsResponseHeader(name: String): Boolean =
+    name.toLowerCase.startsWith("access-control-")
+
+  private def isAmazonHeader(name: String): Boolean =
+    name.toLowerCase.startsWith("x-amz-")
 }
