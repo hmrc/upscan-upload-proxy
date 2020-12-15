@@ -18,6 +18,9 @@ package uk.gov.hmrc.upscanuploadproxy.controllers
 
 import akka.stream.scaladsl.Source
 import akka.util.ByteString
+import play.api.Logger
+import play.api.libs.ws.WSResponse
+
 import javax.inject.{Inject, Singleton}
 import play.api.mvc._
 import uk.gov.hmrc.upscanuploadproxy.UploadUriGenerator
@@ -25,7 +28,7 @@ import uk.gov.hmrc.upscanuploadproxy.helpers.{Response, XmlErrorResponse}
 import uk.gov.hmrc.upscanuploadproxy.model.{ErrorAction, UploadRequest}
 import uk.gov.hmrc.upscanuploadproxy.parsers.{CompositeBodyParser, ErrorActionParser, RawParser}
 import uk.gov.hmrc.upscanuploadproxy.services.ProxyService
-import uk.gov.hmrc.upscanuploadproxy.services.ProxyService.FailureResponse
+import uk.gov.hmrc.upscanuploadproxy.services.ProxyService.{FailureResponse, SuccessResponse}
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -33,6 +36,8 @@ import scala.concurrent.{ExecutionContext, Future}
 class UploadController @Inject()(uriGenerator: UploadUriGenerator, proxyService: ProxyService, cc: ControllerComponents)(
   implicit ec: ExecutionContext)
     extends AbstractController(cc) {
+
+  private val logger = Logger(this.getClass)
 
   /*
    * If the BodyParser returns a Left[Result] then that will be returned directly to the client by the framework.
@@ -43,19 +48,27 @@ class UploadController @Inject()(uriGenerator: UploadUriGenerator, proxyService:
   def upload(destination: String): Action[UploadRequest] = Action.async(uploadRequestParser) { implicit request =>
     val url          = uriGenerator.uri(destination)
     val proxyHeaders = extractS3Headers(request.headers.headers)
-    val failWith     = handleFailure(request.body.errorAction) _
+    val errorAction  = request.body.errorAction
+    val failWith     = handleFailure(errorAction) _
+
+    def logResponse(response: WSResponse): WSResponse = {
+      logger.info(s"Upload response - Key=[${errorAction.key}] Status=[${response.status}] Body=[${response.body}] Headers=[${response.headers}]")
+      response
+    }
 
     request.body.errorOrMultipartForm.fold(
       bodyParseError => Future.successful(failWith(FailureResponse(INTERNAL_SERVER_ERROR, bodyParseError))),
-      body =>
+      body => {
+        logger.info(s"Upload request - Key=[${errorAction.key}] Url=[$url] Headers=[$proxyHeaders]")
         proxyService
-          .proxy(url, request.withHeaders(Headers(proxyHeaders: _*)), body, ProxyService.toResultEither)
+          .proxy(url, request.withHeaders(Headers(proxyHeaders: _*)), body, (logResponse _).andThen(ProxyService.toResultEither))
           .map {
             _.fold(
               failure => failWith(failure),
               success => success
             )
-        }
+          }
+      }
     )
   }
 
@@ -75,10 +88,18 @@ class UploadController @Inject()(uriGenerator: UploadUriGenerator, proxyService:
     implicit request =>
       val url          = uriGenerator.uri(destination)
       val proxyHeaders = extractS3Headers(request.headers.headers)
+
+      def logResponse(response: WSResponse): WSResponse = {
+        logger.info(s"PassThrough response - Status=[${response.status}] Body=[${response.body}] Headers=[${response.headers}]")
+        response
+      }
+
       request.body.fold(
         err => Future.successful(Response.internalServerError(err)),
-        multipartForm =>
-          proxyService.proxy(url, request.withHeaders(Headers(proxyHeaders: _*)), multipartForm, ProxyService.toResult)
+        multipartForm => {
+          logger.info(s"PassThrough request - Url=[$url] Headers=[$proxyHeaders]")
+          proxyService.proxy(url, request.withHeaders(Headers(proxyHeaders: _*)), multipartForm, (logResponse _).andThen(ProxyService.toResult))
+        }
       )
   }
 

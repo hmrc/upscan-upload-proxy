@@ -42,6 +42,8 @@ class ErrorHandler @Inject()(
   override protected def onNotFound(request: RequestHeader, message: String): Future[Result] =
     Future.successful(Response.notFound(s"Path '${request.path}' not found."))
 
-  override protected def onBadRequest(request: RequestHeader, message: String): Future[Result] =
+  override protected def onBadRequest(request: RequestHeader, message: String): Future[Result] = {
+    logger.info(s"Rejected BadRequest - [$message] Headers: [${request.headers.toSimpleMap}]")
     Future.successful(Response.badRequest(s"Bad request: $message"))
+  }
 }
