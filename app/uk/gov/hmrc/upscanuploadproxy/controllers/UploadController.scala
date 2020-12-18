@@ -28,7 +28,7 @@ import uk.gov.hmrc.upscanuploadproxy.helpers.{Response, XmlErrorResponse}
 import uk.gov.hmrc.upscanuploadproxy.model.{ErrorAction, UploadRequest}
 import uk.gov.hmrc.upscanuploadproxy.parsers.{CompositeBodyParser, ErrorActionParser, RawParser}
 import uk.gov.hmrc.upscanuploadproxy.services.ProxyService
-import uk.gov.hmrc.upscanuploadproxy.services.ProxyService.{FailureResponse, SuccessResponse}
+import uk.gov.hmrc.upscanuploadproxy.services.ProxyService.FailureResponse
 
 import scala.concurrent.{ExecutionContext, Future}
 
