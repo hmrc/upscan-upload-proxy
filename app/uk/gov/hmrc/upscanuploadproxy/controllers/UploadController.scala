@@ -24,6 +24,7 @@ import play.api.libs.ws.WSResponse
 import javax.inject.{Inject, Singleton}
 import play.api.mvc._
 import uk.gov.hmrc.upscanuploadproxy.UploadUriGenerator
+import uk.gov.hmrc.upscanuploadproxy.helpers.Logging.withFileReferenceContext
 import uk.gov.hmrc.upscanuploadproxy.helpers.{Response, XmlErrorResponse}
 import uk.gov.hmrc.upscanuploadproxy.model.{ErrorAction, UploadRequest}
 import uk.gov.hmrc.upscanuploadproxy.parsers.{CompositeBodyParser, ErrorActionParser, RawParser}
@@ -56,20 +57,22 @@ class UploadController @Inject()(uriGenerator: UploadUriGenerator, proxyService:
       response
     }
 
-    request.body.errorOrMultipartForm.fold(
-      bodyParseError => Future.successful(failWith(FailureResponse(INTERNAL_SERVER_ERROR, bodyParseError))),
-      body => {
-        logger.info(s"Upload request - Key=[${errorAction.key}] Url=[$url] Headers=[$proxyHeaders]")
-        proxyService
-          .proxy(url, request.withHeaders(Headers(proxyHeaders: _*)), body, (logResponse _).andThen(ProxyService.toResultEither))
-          .map {
-            _.fold(
-              failure => failWith(failure),
-              success => success
-            )
-          }
-      }
-    )
+    withFileReferenceContext(errorAction.key) {
+      request.body.errorOrMultipartForm.fold(
+        bodyParseError => Future.successful(failWith(FailureResponse(INTERNAL_SERVER_ERROR, bodyParseError))),
+        body => {
+          logger.info(s"Upload request - Key=[${errorAction.key}] Url=[$url] Headers=[$proxyHeaders]")
+          proxyService
+            .proxy(url, request.withHeaders(Headers(proxyHeaders: _*)), body, (logResponse _).andThen(ProxyService.toResultEither))
+            .map {
+              _.fold(
+                failure => failWith(failure),
+                success => success
+              )
+            }
+        }
+      )
+    }
   }
 
   /*

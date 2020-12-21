@@ -45,9 +45,12 @@ object ErrorActionParser {
     BodyParser { requestHeader =>
       parser
         .multipartFormData(fileIgnoreHandler)(requestHeader)
-        .map(_.flatMap { multipartFormData =>
-          extractErrorAction(multipartFormData).left.map(handleParseError(multipartFormData))
-        })
+        .map { multipartParseResult =>
+          multipartParseResult.left.foreach(_ => logger.warn("Unable to parse body as multipartFormData"))
+          multipartParseResult.flatMap { multipartFormData =>
+            extractErrorAction(multipartFormData).left.map(handleParseError(multipartFormData))
+          }
+        }
     }
 
   private def fileIgnoreHandler(implicit ec: ExecutionContext): Multipart.FilePartHandler[Unit] =
