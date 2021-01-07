@@ -16,9 +16,6 @@
 
 package uk.gov.hmrc.upscanuploadproxy.parsers
 
-import java.net.URI
-import java.nio.charset.StandardCharsets.UTF_8
-
 import akka.stream.scaladsl.Sink
 import org.apache.http.client.utils.URIBuilder
 import play.api.Logger
@@ -26,10 +23,11 @@ import play.api.libs.streams.Accumulator
 import play.api.mvc.MultipartFormData.FilePart
 import play.api.mvc._
 import play.core.parsers.Multipart
-
 import uk.gov.hmrc.upscanuploadproxy.helpers.Response
 import uk.gov.hmrc.upscanuploadproxy.model.ErrorAction
 
+import java.net.URI
+import java.nio.charset.StandardCharsets.UTF_8
 import scala.concurrent.ExecutionContext
 import scala.util.Try
 
@@ -47,19 +45,12 @@ object ErrorActionParser {
     BodyParser { requestHeader =>
       parser
         .multipartFormData(fileIgnoreHandler)(requestHeader)
-        .map(_.flatMap { multiformPartData =>
-          val logErrorFn = logFailedRequest(requestHeader, multiformPartData) _
-          (extractErrorAction _ andThen logErrorFn)(multiformPartData)
-        })
-    }
-
-  private def logFailedRequest[A](requestHeader: play.api.mvc.RequestHeader, multipartFormData: MultipartFormData[A])(
-    errorAction: Either[Result, ErrorAction]): Either[Result, ErrorAction] =
-    Function.const(errorAction) {
-      errorAction.left.foreach { _ =>
-        logger.info(s"Failed request - \n Headers:\n${requestHeader.headers.toSimpleMap
-          .mkString("\n")}\n Data Parts:\n${multipartFormData.dataParts.keySet.mkString("\n")}")
-      }
+        .map { multipartParseResult =>
+          multipartParseResult.left.foreach(_ => logger.warn("Unable to parse body as multipartFormData"))
+          multipartParseResult.flatMap { multipartFormData =>
+            extractErrorAction(multipartFormData).left.map(handleParseError(multipartFormData))
+          }
+        }
     }
 
   private def fileIgnoreHandler(implicit ec: ExecutionContext): Multipart.FilePartHandler[Unit] =
@@ -67,36 +58,49 @@ object ErrorActionParser {
       Accumulator(Sink.ignore)
         .map(_ => FilePart(fileInfo.partName, fileInfo.fileName, fileInfo.contentType, ()))
 
-  private def extractErrorAction(multipartFormData: MultipartFormData[Unit]): Either[Result, ErrorAction] =
+  private def extractErrorAction(multipartFormData: MultipartFormData[Unit]): Either[ParseError, ErrorAction] =
     for {
       key              <- extractKey(multipartFormData)
       maybeRedirectUrl <- Right(extractErrorActionRedirect(multipartFormData))
       errorAction      <- validateErrorAction(key, maybeRedirectUrl)
     } yield errorAction
 
-  private def extractKey(multiPartFormData: MultipartFormData[Unit]): Either[Result, String] =
-    extractSingletonFormValue("key", multiPartFormData).toRight(left = missingKey)
+  private def extractKey(multiPartFormData: MultipartFormData[Unit]): Either[ParseError, String] =
+    extractSingletonFormValue(KeyDataPartName, multiPartFormData).toRight(left = ParseError(MissingKey))
 
   private def extractErrorActionRedirect(multipartFormData: MultipartFormData[Unit]): Option[String] =
-    extractSingletonFormValue("error_action_redirect", multipartFormData)
+    extractSingletonFormValue(ErrorActionRedirectDataPartName, multipartFormData)
 
   private def extractSingletonFormValue(key: String, multiPartFormData: MultipartFormData[Unit]): Option[String] =
     multiPartFormData.dataParts
       .get(key)
       .flatMap(_.headOption)
 
-  private def validateErrorAction(key: String, maybeRedirectUrl: Option[String]): Either[Result, ErrorAction] =
+  private def validateErrorAction(key: String, maybeRedirectUrl: Option[String]): Either[ParseError, ErrorAction] =
     maybeRedirectUrl
       .map {
         validateErrorActionRedirectUrlWithKey(_, key).map(_ => ErrorAction(maybeRedirectUrl, key))
       }
       .getOrElse(Right(ErrorAction(None, key)))
 
-  private def validateErrorActionRedirectUrlWithKey(redirectUrl: String, key: String): Either[Result, URI] =
+  private def validateErrorActionRedirectUrlWithKey(redirectUrl: String, key: String): Either[ParseError, URI] =
     Try {
       new URIBuilder(redirectUrl, UTF_8).addParameter("key", key).build()
-    }.toOption.toRight(left = badRedirectUrl)
+    }.toOption.toRight(left = ParseError(BadRedirectUrl))
 
-  private val missingKey     = Response.badRequest("Could not find key field in request")
-  private val badRedirectUrl = Response.badRequest("Unable to build valid redirect URL for error action")
+  private def handleParseError[A](multipartFormData: MultipartFormData[A])(parseError: ParseError): Result = {
+    val dataParts = multipartFormData.dataParts.filterKeys(TargetDataPartNames.contains).map { case (key, values) =>
+      s"""$key=${values.mkString("[", ",", "]")}"""
+    }.mkString("{", ",", "}")
+    logger.info(s"Failed request parsing ErrorAction - [${parseError.message}] with target dataParts: $dataParts")
+    Response.badRequest(parseError.message)
+  }
+
+  private case class ParseError(message: String)
+  private val MissingKey = "Could not find key field in request"
+  private val BadRedirectUrl = "Unable to build valid redirect URL for error action"
+
+  private val KeyDataPartName = "key"
+  private val ErrorActionRedirectDataPartName = "error_action_redirect"
+  private val TargetDataPartNames = Set(KeyDataPartName, ErrorActionRedirectDataPartName)
 }

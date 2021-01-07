@@ -19,25 +19,22 @@ package uk.gov.hmrc.upscanuploadproxy.services
 import akka.stream.scaladsl.Source
 import akka.util.ByteString
 import com.google.inject.Singleton
-import javax.inject.Inject
-import play.api.Logging
 import play.api.http.Status
 import play.api.libs.ws.{WSClient, WSResponse}
 import play.api.mvc.{Request, Result, Results}
 
+import javax.inject.Inject
 import scala.concurrent.duration.Duration
 import scala.concurrent.{ExecutionContext, Future}
 
 @Singleton
-class ProxyService @Inject()(wsClient: WSClient)(implicit ec: ExecutionContext) extends Logging {
+class ProxyService @Inject()(wsClient: WSClient)(implicit ec: ExecutionContext) {
 
   def proxy[T](
     url: String,
     request: Request[_],
     source: Source[ByteString, _],
     processResponse: WSResponse => T): Future[T] = {
-
-    logger.info(s"Request: Url: $url Headers: ${request.headers.headers}")
 
     wsClient
       .url(url)
@@ -48,13 +45,7 @@ class ProxyService @Inject()(wsClient: WSClient)(implicit ec: ExecutionContext) 
       .withRequestTimeout(Duration.Inf)
       .withBody(source)
       .execute(request.method)
-      .map(logResponse)
       .map(processResponse)
-  }
-
-  private def logResponse(response: WSResponse): WSResponse = {
-    logger.info(s"Response: Status ${response.status}, Body ${response.body}, Headers ${response.headers}")
-    response
   }
 }
 
