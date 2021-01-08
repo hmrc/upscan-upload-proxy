@@ -49,6 +49,12 @@ trait AcceptanceSpec
 
     new GuiceApplicationBuilder()
       .overrides(bind[UploadUriGenerator].toInstance(uploadUrlGenerator))
+      /*
+       * Disable metrics modules for acceptance tests to avoid:
+       *   Error injecting constructor, java.lang.IllegalArgumentException: A metric named jvm.attribute.vendor already exists
+       */
+      .disable(classOf[com.kenshoo.play.metrics.PlayModule])
+      .disable(classOf[uk.gov.hmrc.play.bootstrap.graphite.GraphiteMetricsModule])
       .build()
   }
 
