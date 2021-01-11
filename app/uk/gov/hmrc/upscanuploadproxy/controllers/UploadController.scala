@@ -52,27 +52,28 @@ class UploadController @Inject()(uriGenerator: UploadUriGenerator, proxyService:
     val errorAction  = request.body.errorAction
     val failWith     = handleFailure(errorAction) _
 
-    def logResponse(response: WSResponse): WSResponse = {
-      logger.info(s"Upload response - Key=[${errorAction.key}] Status=[${response.status}] Body=[${response.body}] Headers=[${response.headers}]")
-      response
-    }
+    def logResponse(response: WSResponse): WSResponse =
+      withFileReferenceContext(errorAction.key) {
+        logger.info(s"Upload response - Key=[${errorAction.key}] Status=[${response.status}] Body=[${response.body}] Headers=[${response.headers}]")
+        response
+      }
 
-    withFileReferenceContext(errorAction.key) {
-      request.body.errorOrMultipartForm.fold(
-        bodyParseError => Future.successful(failWith(FailureResponse(INTERNAL_SERVER_ERROR, bodyParseError))),
-        body => {
+    request.body.errorOrMultipartForm.fold(
+      bodyParseError => Future.successful(failWith(FailureResponse(INTERNAL_SERVER_ERROR, bodyParseError))),
+      body => {
+        withFileReferenceContext(errorAction.key) {
           logger.info(s"Upload request - Key=[${errorAction.key}] Url=[$url] Headers=[$proxyHeaders]")
-          proxyService
-            .proxy(url, request.withHeaders(Headers(proxyHeaders: _*)), body, (logResponse _).andThen(ProxyService.toResultEither))
-            .map {
-              _.fold(
-                failure => failWith(failure),
-                success => success
-              )
-            }
         }
-      )
-    }
+        proxyService
+          .proxy(url, request.withHeaders(Headers(proxyHeaders: _*)), body, (logResponse _).andThen(ProxyService.toResultEither))
+          .map {
+            _.fold(
+              failure => failWith(failure),
+              success => success
+            )
+          }
+      }
+    )
   }
 
   /*
