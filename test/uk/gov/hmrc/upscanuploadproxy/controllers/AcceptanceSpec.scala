@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 HM Revenue & Customs
+ * Copyright 2021 HM Revenue & Customs
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -49,6 +49,12 @@ trait AcceptanceSpec
 
     new GuiceApplicationBuilder()
       .overrides(bind[UploadUriGenerator].toInstance(uploadUrlGenerator))
+      /*
+       * Disable metrics modules for acceptance tests to avoid:
+       *   Error injecting constructor, java.lang.IllegalArgumentException: A metric named jvm.attribute.vendor already exists
+       */
+      .disable(classOf[com.kenshoo.play.metrics.PlayModule])
+      .disable(classOf[uk.gov.hmrc.play.bootstrap.graphite.GraphiteMetricsModule])
       .build()
   }
 
