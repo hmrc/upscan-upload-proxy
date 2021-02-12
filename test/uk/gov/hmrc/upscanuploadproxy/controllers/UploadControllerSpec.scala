@@ -227,6 +227,26 @@ class UploadControllerSpec extends AcceptanceSpec with ScalaFutures {
       Json.parse(response.body) mustBe fullAwsErrorAsJson
     }
 
+    "proxy status code with error translation on S3 AccessDenied error_action_redirect policy condition failed" in {
+      val fullAwsErrorAsJson = Json.parse(
+        """|{
+           | "key": "b198de49-e7b5-49a8-83ff-068fc9357481",
+           | "errorCode": "AccessDenied",
+           | "errorMessage": "Invalid according to Policy: Policy Condition failed: [\"eq\", \"$error_action_redirect\", \"https://some-service/error\"]",
+           | "errorResource": "/mybucket/myfoto.jpg",
+           | "errorRequestId": "4442587FB7D0A2F9"
+           |}""".stripMargin)
+
+      val s3Response = aResponse().withStatus(FORBIDDEN).withHeader(CONTENT_TYPE, XML).withBody(ErrorRedirectPolicyConditionFailedResponse)
+      stubS3ForPost(RequestMultipartFormDataExcludingRedirects, willReturn = s3Response)
+
+      val response = makeUploadRequest(withBody = readResource("/request-with-error-action-redirect"))
+
+      response.status mustBe FORBIDDEN
+      response.contentType mustBe JSON
+      Json.parse(response.body) mustBe fullAwsErrorAsJson
+    }
+
     "proxy status code with error translation on S3 4xx when error redirect is not specified retaining allowed upstream response headers" in {
       val xAmzIdHeaderValue = "some-aws-id"
       val accessControlAllowOriginHeaderValue = "https://myservice.com"
@@ -550,6 +570,15 @@ private object UploadControllerSpec {
        |  <Resource>/mybucket/myfoto.jpg</Resource>
        |  <RequestId>4442587FB7D0A2F9</RequestId>
        |</Error>""".stripMargin
+
+  val ErrorRedirectPolicyConditionFailedResponse =
+    """<?xml version="1.0" encoding="UTF-8"?>
+      |<Error>
+      |    <Code>AccessDenied</Code>
+      |    <Message>Invalid according to Policy: Policy Condition failed: ["eq", "$error_action_redirect", "https://some-service/error"]</Message>
+      |    <Resource>/mybucket/myfoto.jpg</Resource>
+      |    <RequestId>4442587FB7D0A2F9</RequestId>
+      |</Error>""".stripMargin
 
   val AccessControlAllowOrigin = "Access-Control-Allow-Origin"
   val XAmzId = "x-amz-id-2"

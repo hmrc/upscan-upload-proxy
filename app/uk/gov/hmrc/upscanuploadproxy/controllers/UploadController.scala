@@ -81,11 +81,24 @@ class UploadController @Inject()(uriGenerator: UploadUriGenerator, proxyService:
    * Otherwise send back the failure status code with a JSON body representing the error if possible.
    */
   private def handleFailure(errorAction: ErrorAction)(failure: FailureResponse): Result = {
-    val result = errorAction.redirectUrl.fold(
-      ifEmpty = Response.json(failure.statusCode, body = XmlErrorResponse.toJson(errorAction.key, failure.body))) {
-      redirectUrl => Response.redirect(redirectUrl, queryParams = XmlErrorResponse.toFields(errorAction.key, failure.body))
+    lazy val xmlFields = XmlErrorResponse.toFields(errorAction.key, failure.body)
+    lazy val json = Response.json(failure.statusCode, body = XmlErrorResponse.toJson(errorAction.key, failure.body))
+    val result = errorAction.redirectUrl match {
+      case None => json
+      case Some(_) if isErrorRedirectUrlPolicyError(xmlFields, failure.statusCode) => json
+      case Some(errorRedirectUrl) => Response.redirect(errorRedirectUrl, queryParams = xmlFields)
     }
     result.withHeaders(failure.headers: _*)
+  }
+
+  private def isErrorRedirectUrlPolicyError(xmlFields: Seq[(String, String)], failureStatusCode: Int): Boolean = {
+    lazy val isForbiddenStatusCode = failureStatusCode == FORBIDDEN
+    lazy val isAccessDeniedCode    = xmlFields.find(_._1 == "errorCode").exists(_._2 == "AccessDenied")
+    lazy val isErrorRedirectPolicyErrorMessage = xmlFields
+      .find(_._1 == "errorMessage")
+      .map(_._2)
+      .exists(m => m.contains("Policy Condition failed") && m.contains("$error_action_redirect"))
+    isForbiddenStatusCode && isAccessDeniedCode && isErrorRedirectPolicyErrorMessage
   }
 
   def passThrough(destination: String): Action[Either[String, Source[ByteString, _]]] = Action.async(rawParser) {
