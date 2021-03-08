@@ -19,7 +19,7 @@ package uk.gov.hmrc.upscanuploadproxy.helpers
 import org.scalatest.matchers.should
 import org.scalatest.wordspec.AnyWordSpecLike
 import play.api.libs.json.Json
-import uk.gov.hmrc.upscanuploadproxy.helpers.XmlErrorResponse.{toFields, toJson}
+import uk.gov.hmrc.upscanuploadproxy.helpers.XmlErrorResponse.{toFields, toJson, toXmlErrorBody}
 
 class XmlErrorResponseSpec extends AnyWordSpecLike with should.Matchers {
 
@@ -124,6 +124,13 @@ class XmlErrorResponseSpec extends AnyWordSpecLike with should.Matchers {
           """{"key": "a-key"}"""
         )
       }
+    }
+
+    "be creatable from a plain message" in {
+      toFields(key = "a-key", toXmlErrorBody("a plain message")) should contain theSameElementsAs Seq(
+        "key"          -> "a-key",
+        "errorMessage" -> "a plain message"
+      )
     }
   }
 }

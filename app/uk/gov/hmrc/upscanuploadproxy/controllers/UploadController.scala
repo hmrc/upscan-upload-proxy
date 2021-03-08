@@ -16,21 +16,19 @@
 
 package uk.gov.hmrc.upscanuploadproxy.controllers
 
-import akka.stream.scaladsl.Source
-import akka.util.ByteString
 import play.api.Logger
+import play.api.libs.Files.TemporaryFile
 import play.api.libs.ws.WSResponse
-
-import javax.inject.{Inject, Singleton}
 import play.api.mvc._
 import uk.gov.hmrc.upscanuploadproxy.UploadUriGenerator
 import uk.gov.hmrc.upscanuploadproxy.helpers.Logging.withFileReferenceContext
-import uk.gov.hmrc.upscanuploadproxy.helpers.{Response, XmlErrorResponse}
+import uk.gov.hmrc.upscanuploadproxy.helpers.{BufferedBody, Response, XmlErrorResponse}
 import uk.gov.hmrc.upscanuploadproxy.model.{ErrorAction, UploadRequest}
-import uk.gov.hmrc.upscanuploadproxy.parsers.{CompositeBodyParser, ErrorActionParser, RawParser}
+import uk.gov.hmrc.upscanuploadproxy.parsers.{CompositeBodyParser, ErrorActionParser}
 import uk.gov.hmrc.upscanuploadproxy.services.ProxyService
 import uk.gov.hmrc.upscanuploadproxy.services.ProxyService.FailureResponse
 
+import javax.inject.{Inject, Singleton}
 import scala.concurrent.{ExecutionContext, Future}
 
 @Singleton()
@@ -40,12 +38,6 @@ class UploadController @Inject()(uriGenerator: UploadUriGenerator, proxyService:
 
   private val logger = Logger(this.getClass)
 
-  /*
-   * If the BodyParser returns a Left[Result] then that will be returned directly to the client by the framework.
-   * If it returns an UploadRequest that contains a Left[String] we treat that as an Internal Server Error for
-   * consistency with the existing approach in `passThrough`, although this seems a questionable choice of status
-   * code.
-   */
   def upload(destination: String): Action[UploadRequest] = Action.async(uploadRequestParser) { implicit request =>
     val url          = uriGenerator.uri(destination)
     val proxyHeaders = extractS3Headers(request.headers.headers)
@@ -58,22 +50,29 @@ class UploadController @Inject()(uriGenerator: UploadUriGenerator, proxyService:
         response
       }
 
-    request.body.errorOrMultipartForm.fold(
-      bodyParseError => Future.successful(failWith(FailureResponse(INTERNAL_SERVER_ERROR, bodyParseError))),
-      body => {
-        withFileReferenceContext(errorAction.key) {
-          logger.info(s"Upload request - Key=[${errorAction.key}] Url=[$url] Headers=[$proxyHeaders]")
-        }
-        proxyService
-          .proxy(url, request.withHeaders(Headers(proxyHeaders: _*)), body, (logResponse _).andThen(ProxyService.toResultEither))
-          .map {
-            _.fold(
-              failure => failWith(failure),
-              success => success
-            )
+    BufferedBody.withTemporaryFile(request.map(_.bufferedBody), fileReference = Some(errorAction.key)) {
+      _.fold(
+        err => {
+          withFileReferenceContext(errorAction.key) {
+            logger.error(s"TemporaryFile Error [${err.getMessage}]", err)
           }
-      }
-    )
+          Future.successful(failWith(FailureResponse(INTERNAL_SERVER_ERROR, XmlErrorResponse.toXmlErrorBody("Upload Error"))))
+        },
+        body => {
+          withFileReferenceContext(errorAction.key) {
+            logger.info(s"Upload request - Key=[${errorAction.key}] Url=[$url] Headers=[$proxyHeaders]")
+          }
+          proxyService
+            .proxy(url, request.withHeaders(Headers(proxyHeaders: _*)), body, (logResponse _).andThen(ProxyService.toResultEither))
+            .map {
+              _.fold(
+                failure => failWith(failure),
+                success => success
+              )
+            }
+        }
+      )
+    }
   }
 
   /*
@@ -101,30 +100,32 @@ class UploadController @Inject()(uriGenerator: UploadUriGenerator, proxyService:
     isForbiddenStatusCode && isAccessDeniedCode && isErrorRedirectPolicyErrorMessage
   }
 
-  def passThrough(destination: String): Action[Either[String, Source[ByteString, _]]] = Action.async(rawParser) {
-    implicit request =>
-      val url          = uriGenerator.uri(destination)
-      val proxyHeaders = extractS3Headers(request.headers.headers)
+  def passThrough(destination: String): Action[TemporaryFile] = Action.async(cc.parsers.temporaryFile) { implicit request =>
+    val url          = uriGenerator.uri(destination)
+    val proxyHeaders = extractS3Headers(request.headers.headers)
 
-      def logResponse(response: WSResponse): WSResponse = {
-        logger.info(s"PassThrough response - Status=[${response.status}] Body=[${response.body}] Headers=[${response.headers}]")
-        response
-      }
+    def logResponse(response: WSResponse): WSResponse = {
+      logger.info(s"PassThrough response - Status=[${response.status}] Body=[${response.body}] Headers=[${response.headers}]")
+      response
+    }
 
-      request.body.fold(
-        err => Future.successful(Response.internalServerError(err)),
-        multipartForm => {
+    BufferedBody.withTemporaryFile(request, fileReference = None) {
+      _.fold(
+        err => {
+          logger.error(s"TemporaryFile Error [${err.getMessage}]", err)
+          Future.successful(Response.internalServerError("Upload Error"))
+        },
+        body => {
           logger.info(s"PassThrough request - Url=[$url] Headers=[$proxyHeaders]")
-          proxyService.proxy(url, request.withHeaders(Headers(proxyHeaders: _*)), multipartForm, (logResponse _).andThen(ProxyService.toResult))
+          proxyService.proxy(url, request.withHeaders(Headers(proxyHeaders: _*)), body, (logResponse _).andThen(ProxyService.toResult))
         }
       )
+    }
   }
-
-  private val rawParser: BodyParser[Either[String, Source[ByteString, _]]] = RawParser.parser(cc.parsers)
 
   private val uploadRequestParser: BodyParser[UploadRequest] = CompositeBodyParser(
     ErrorActionParser.parser(cc.parsers),
-    rawParser
+    cc.parsers.temporaryFile
   ).map(UploadRequest.tupled)
 
   private val s3Headers = Set("origin", "access-control-request-method", "content-type", "content-length")
