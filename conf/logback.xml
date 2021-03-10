@@ -45,9 +45,7 @@
 
     <logger name="com.google.inject" level="INFO"/>
 
-    <logger name="play.api.libs.Files" level="DEBUG"/>
     <logger name="play.api.libs.Files$DefaultTemporaryFileCreator" level="DEBUG"/>
-    <logger name="play.api.libs.Files$DefaultTemporaryFileReaper" level="DEBUG"/>
 
     <logger name="uk.gov" level="INFO"/>
 

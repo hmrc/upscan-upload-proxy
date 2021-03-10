@@ -16,7 +16,7 @@
 
 package uk.gov.hmrc.upscanuploadproxy.model
 
-import akka.stream.scaladsl.Source
-import akka.util.ByteString
+import play.api.libs.Files.TemporaryFile
 
-case class UploadRequest(errorAction: ErrorAction, errorOrMultipartForm: Either[String, Source[ByteString, _]])
+
+case class UploadRequest(errorAction: ErrorAction, bufferedBody: TemporaryFile)

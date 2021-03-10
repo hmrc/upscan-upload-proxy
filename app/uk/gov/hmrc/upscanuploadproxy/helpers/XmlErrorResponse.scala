@@ -24,6 +24,10 @@ import scala.xml.Elem
 object XmlErrorResponse {
 
   private val KeyName = "key"
+  private val MessageField = "Message"
+
+  def toXmlErrorBody(message: String): String =
+    s"<Error><$MessageField>$message</$MessageField></Error>"
 
   def toJson(key: String, xmlErrorBody: String): JsValue =
     Json.toJsObject(toFields(key, xmlErrorBody).toMap)
@@ -35,7 +39,7 @@ object XmlErrorResponse {
     Try(scala.xml.XML.loadString(xmlErrorBody)).toOption.toList.flatMap { xml =>
       val requestId = makeOptionalField("RequestId", xml)
       val resource  = makeOptionalField("Resource", xml)
-      val message   = makeOptionalField("Message", xml)
+      val message   = makeOptionalField(MessageField, xml)
       val code      = makeOptionalField("Code", xml)
 
       Seq(code, message, resource, requestId).flatten
