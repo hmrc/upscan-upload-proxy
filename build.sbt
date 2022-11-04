@@ -1,13 +1,12 @@
 import com.typesafe.sbt.packager.Keys.{bashScriptExtraDefines, dockerBaseImage, dockerRepository, dockerUpdateLatest}
 import uk.gov.hmrc.DefaultBuildSettings.integrationTestSettings
 import uk.gov.hmrc.sbtdistributables.SbtDistributablesPlugin.publishingSettings
-import uk.gov.hmrc.versioning.SbtGitVersioning.autoImport.majorVersion
 
 val appName = "upscan-upload-proxy"
 
 lazy val microservice = Project(appName, file("."))
   .enablePlugins(play.sbt.PlayScala, SbtDistributablesPlugin)
-  .settings(scalaVersion := "2.12.12")
+  .settings(scalaVersion := "2.12.15")
   .settings(
     libraryDependencies ++= AppDependencies.compile ++ AppDependencies.test
   )
