@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 HM Revenue & Customs
+ * Copyright 2022 HM Revenue & Customs
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +20,6 @@ import uk.gov.hmrc.upscanuploadproxy.UploadUriGenerator
 
 class UpscanProxyModule extends Module {
 
-  @SuppressWarnings(Array("org.wartremover.warts.TryPartial"))
   override def bindings(environment: Environment, configuration: Configuration): Seq[Binding[_]] =
     Seq(
       bind[UploadUriGenerator].to(new UploadUriGenerator {

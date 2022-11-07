@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 HM Revenue & Customs
+ * Copyright 2022 HM Revenue & Customs
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,7 +39,7 @@ object BufferedBody {
     val inPath = request.body.path
     val outPath = inPath.resolveSibling(inPath.getFileName + AdoptedFileSuffix)
 
-    val moveFileResult = Try(request.body.atomicMoveFileWithFallback(outPath))
+    val moveFileResult = Try(request.body.atomicMoveWithFallback(outPath))
     withFileReferenceContext(fileReference.getOrElse("")) {
       moveFileResult.foreach(newPath => logger.debug(s"Moved TemporaryFile$forKey from [$inPath] to [$newPath]"))
     }
