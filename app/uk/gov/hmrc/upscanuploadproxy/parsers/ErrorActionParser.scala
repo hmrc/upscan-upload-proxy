@@ -16,7 +16,7 @@
 
 package uk.gov.hmrc.upscanuploadproxy.parsers
 
-import akka.stream.scaladsl.Sink
+import org.apache.pekko.stream.scaladsl.Sink
 import org.apache.http.client.utils.URIBuilder
 import play.api.Logger
 import play.api.libs.streams.Accumulator

@@ -16,8 +16,8 @@
 
 package uk.gov.hmrc.upscanuploadproxy.helpers
 
-import akka.stream.scaladsl.{FileIO, Source}
-import akka.util.ByteString
+import org.apache.pekko.stream.scaladsl.{FileIO, Source}
+import org.apache.pekko.util.ByteString
 import play.api.Logger
 import play.api.libs.Files.TemporaryFile
 import play.api.mvc._

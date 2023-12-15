@@ -16,10 +16,11 @@
 
 package uk.gov.hmrc.upscanuploadproxy.parsers
 
-import akka.stream.SinkShape
-import akka.stream.scaladsl.GraphDSL.Implicits._
-import akka.stream.scaladsl.{Broadcast, GraphDSL, Sink}
-import akka.util.ByteString
+
+import org.apache.pekko.stream.SinkShape
+import org.apache.pekko.stream.scaladsl.GraphDSL.Implicits._
+import org.apache.pekko.stream.scaladsl.{Broadcast, GraphDSL, Sink}
+import org.apache.pekko.util.ByteString
 import play.api.libs.streams.Accumulator
 import play.api.mvc._
 

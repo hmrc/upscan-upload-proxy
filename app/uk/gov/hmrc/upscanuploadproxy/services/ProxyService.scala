@@ -16,8 +16,8 @@
 
 package uk.gov.hmrc.upscanuploadproxy.services
 
-import akka.stream.scaladsl.Source
-import akka.util.ByteString
+import org.apache.pekko.stream.scaladsl.Source
+import org.apache.pekko.util.ByteString
 import com.google.inject.Singleton
 import play.api.http.Status
 import play.api.libs.ws.{WSClient, WSResponse}

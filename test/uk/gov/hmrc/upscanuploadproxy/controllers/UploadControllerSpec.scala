@@ -28,12 +28,15 @@ import org.scalatest.time.{Millis, Span}
 import play.api.http.Status._
 import play.api.libs.json.Json
 import play.api.libs.ws.{WSRequest, WSResponse}
+import play.api.test.Helpers.TRANSFER_ENCODING
 import play.mvc.Http.HeaderNames.{CONTENT_LENGTH, CONTENT_TYPE, ETAG, LOCATION}
 import play.mvc.Http.MimeTypes.{JSON, XML}
-import uk.gov.hmrc.integration.UrlHelper.-/
-import wiremock.org.apache.http.HttpHeaders.TRANSFER_ENCODING
+import uk.gov.hmrc.upscanuploadproxy.controllers.UrlHelper.-/
+import org.scalactic.Explicitly._
+import org.scalactic.StringNormalizations._
+import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.io.Source
 
 class UploadControllerSpec extends AcceptanceSpec with ScalaFutures {
@@ -258,6 +261,7 @@ class UploadControllerSpec extends AcceptanceSpec with ScalaFutures {
         .withHeader(XAmzId, xAmzIdHeaderValue)
         .withHeader(AccessControlAllowOrigin, accessControlAllowOriginHeaderValue)
         .withBody(FullAwsError)
+
       stubS3ForPost(RequestMultipartFormDataExcludingRedirects, willReturn = s3Response)
 
       val response = makeUploadRequest(withBody = readResource("/request-no-action-redirects"))
@@ -267,7 +271,7 @@ class UploadControllerSpec extends AcceptanceSpec with ScalaFutures {
       response.header(AccessControlAllowOrigin) must contain(accessControlAllowOriginHeaderValue)
       // content-related headers must reflect our adapted payload not the AWS body
       response.contentType mustBe JSON
-      response.headers must contain key CONTENT_LENGTH
+      response.headers must contain key CONTENT_LENGTH.toLowerCase
       response.headers must not contain key (TRANSFER_ENCODING)
       response.headers must not contain key (ETAG)
     }
@@ -421,7 +425,7 @@ class UploadControllerSpec extends AcceptanceSpec with ScalaFutures {
       response.header(AccessControlAllowOrigin) must contain (accessControlAllowOriginHeaderValue)
       // content-related headers which must reflect our adapted payload not the AWS body
       response.contentType mustBe JSON
-      response.headers must contain key CONTENT_LENGTH
+      response.headers must contain key CONTENT_LENGTH.toLowerCase
       response.headers must not contain key (TRANSFER_ENCODING)
       response.headers must not contain key (ETAG)
     }
@@ -583,4 +587,9 @@ private object UploadControllerSpec {
   val AccessControlAllowOrigin = "Access-Control-Allow-Origin"
   val XAmzId = "x-amz-id-2"
   val ChunkedTransferEncoding = "chunked"
+}
+
+object UrlHelper {
+  def -/(uri: String) =
+    if (uri.startsWith("/")) uri.drop(1) else uri
 }
