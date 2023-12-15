@@ -40,15 +40,15 @@ trait WireMockHelper extends BeforeAndAfterAll with BeforeAndAfterEach {
 
   def resetWiremock(): Unit = reset()
 
-  override protected def beforeAll: Unit = {
+  override protected def beforeAll(): Unit = {
     wireMockServer.start()
     configureFor("localhost", wireMockPort)
   }
 
-  override protected def afterAll: Unit =
+  override protected def afterAll(): Unit =
     wireMockServer.stop()
 
-  override protected def afterEach: Unit =
+  override protected def afterEach(): Unit =
     reset()
 
 }

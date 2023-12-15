@@ -37,7 +37,7 @@ object BufferedBody {
                           (implicit ec: ExecutionContext): Future[Result] = {
     val forKey = fileReference.map(key => s" for Key [$key]").getOrElse("")
     val inPath = request.body.path
-    val outPath = inPath.resolveSibling(inPath.getFileName + AdoptedFileSuffix)
+    val outPath = inPath.resolveSibling(inPath.getFileName.toString + AdoptedFileSuffix)
 
     val moveFileResult = Try(request.body.atomicMoveWithFallback(outPath))
     withFileReferenceContext(fileReference.getOrElse("")) {

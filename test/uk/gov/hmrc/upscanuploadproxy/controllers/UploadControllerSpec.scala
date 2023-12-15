@@ -32,12 +32,9 @@ import play.api.test.Helpers.TRANSFER_ENCODING
 import play.mvc.Http.HeaderNames.{CONTENT_LENGTH, CONTENT_TYPE, ETAG, LOCATION}
 import play.mvc.Http.MimeTypes.{JSON, XML}
 import uk.gov.hmrc.upscanuploadproxy.controllers.UrlHelper.-/
-import org.scalactic.Explicitly._
-import org.scalactic.StringNormalizations._
-import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
 
-import scala.jdk.CollectionConverters._
 import scala.io.Source
+import scala.jdk.CollectionConverters._
 
 class UploadControllerSpec extends AcceptanceSpec with ScalaFutures {
 

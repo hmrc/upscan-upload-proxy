@@ -89,7 +89,7 @@ object ErrorActionParser {
     }.toOption.toRight(left = ParseError(BadRedirectUrl))
 
   private def handleParseError[A](multipartFormData: MultipartFormData[A])(parseError: ParseError): Result = {
-    val dataParts = multipartFormData.dataParts.filterKeys(TargetDataPartNames.contains).map { case (key, values) =>
+    val dataParts = multipartFormData.dataParts.view.filterKeys(TargetDataPartNames.contains).map { case (key, values) =>
       s"""$key=${values.mkString("[", ",", "]")}"""
     }.mkString("{", ",", "}")
     logger.info(s"Failed request parsing ErrorAction - [${parseError.message}] with target dataParts: $dataParts")

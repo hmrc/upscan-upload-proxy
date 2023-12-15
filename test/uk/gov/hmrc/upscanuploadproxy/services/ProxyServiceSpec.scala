@@ -44,13 +44,13 @@ class ProxyServiceSpec extends AnyWordSpecLike with should.Matchers with Mockito
     "consider a 2xx response a success" in new Fixture {
       stubResponse(withStatus = OK)
 
-      toResultEither(response) should be a 'right
+      toResultEither(response) should be a Symbol("right")
     }
 
     "consider a 3xx response a success" in new Fixture {
       stubResponse(withStatus = SEE_OTHER)
 
-      toResultEither(response) should be a 'right
+      toResultEither(response) should be a Symbol("right")
     }
 
     "consider a 4xx response a failure" in new Fixture {
@@ -72,7 +72,7 @@ class ProxyServiceSpec extends AnyWordSpecLike with should.Matchers with Mockito
     "retain all response headers on success" in new Fixture {
       stubResponse(withStatus = SEE_OTHER, withHeaders = Map("A" -> Seq("1"), "B" -> Seq("2")))
 
-      val resultHeaders = toResultEither(response).right.value.header.headers
+      val resultHeaders = toResultEither(response).value.header.headers
 
       resultHeaders should contain theSameElementsAs Seq("A" -> "1", "B" -> "2")
     }
@@ -105,7 +105,7 @@ class ProxyServiceSpec extends AnyWordSpecLike with should.Matchers with Mockito
       val result = toResultEither(response).left.value
 
       result.headers should contain theSameElementsAs toTuples(corsHeaders ++ amzHeaders)
-      result.headers.map(_._1) should contain noneOf("A", "B")
+      result.headers.map(_._1) should contain.noneOf("A", "B")
     }
   }
 }
