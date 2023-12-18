@@ -16,7 +16,7 @@
 
 package uk.gov.hmrc.upscanuploadproxy.parsers
 
-import akka.stream.scaladsl.Sink
+import org.apache.pekko.stream.scaladsl.Sink
 import org.apache.http.client.utils.URIBuilder
 import play.api.Logger
 import play.api.libs.streams.Accumulator
@@ -89,7 +89,7 @@ object ErrorActionParser {
     }.toOption.toRight(left = ParseError(BadRedirectUrl))
 
   private def handleParseError[A](multipartFormData: MultipartFormData[A])(parseError: ParseError): Result = {
-    val dataParts = multipartFormData.dataParts.filterKeys(TargetDataPartNames.contains).map { case (key, values) =>
+    val dataParts = multipartFormData.dataParts.view.filterKeys(TargetDataPartNames.contains).map { case (key, values) =>
       s"""$key=${values.mkString("[", ",", "]")}"""
     }.mkString("{", ",", "}")
     logger.info(s"Failed request parsing ErrorAction - [${parseError.message}] with target dataParts: $dataParts")

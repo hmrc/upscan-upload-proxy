@@ -16,8 +16,8 @@
 
 package uk.gov.hmrc.upscanuploadproxy.helpers
 
-import akka.stream.scaladsl.{FileIO, Source}
-import akka.util.ByteString
+import org.apache.pekko.stream.scaladsl.{FileIO, Source}
+import org.apache.pekko.util.ByteString
 import play.api.Logger
 import play.api.libs.Files.TemporaryFile
 import play.api.mvc._
@@ -37,7 +37,7 @@ object BufferedBody {
                           (implicit ec: ExecutionContext): Future[Result] = {
     val forKey = fileReference.map(key => s" for Key [$key]").getOrElse("")
     val inPath = request.body.path
-    val outPath = inPath.resolveSibling(inPath.getFileName + AdoptedFileSuffix)
+    val outPath = inPath.resolveSibling(inPath.getFileName.toString + AdoptedFileSuffix)
 
     val moveFileResult = Try(request.body.atomicMoveWithFallback(outPath))
     withFileReferenceContext(fileReference.getOrElse("")) {

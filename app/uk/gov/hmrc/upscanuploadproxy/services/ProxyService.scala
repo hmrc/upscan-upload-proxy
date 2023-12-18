@@ -16,8 +16,8 @@
 
 package uk.gov.hmrc.upscanuploadproxy.services
 
-import akka.stream.scaladsl.Source
-import akka.util.ByteString
+import org.apache.pekko.stream.scaladsl.Source
+import org.apache.pekko.util.ByteString
 import com.google.inject.Singleton
 import play.api.http.Status
 import play.api.libs.ws.{WSClient, WSResponse}
@@ -41,7 +41,7 @@ class ProxyService @Inject()(wsClient: WSClient)(implicit ec: ExecutionContext) 
       .withFollowRedirects(false)
       .withMethod(request.method)
       .withHttpHeaders(request.headers.headers: _*)
-      .withQueryStringParameters(request.queryString.mapValues(_.head).toSeq: _*)
+      .withQueryStringParameters(request.queryString.view.mapValues(_.head).toSeq: _*)
       .withRequestTimeout(Duration.Inf)
       .withBody(source)
       .execute(request.method)
