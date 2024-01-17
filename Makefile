@@ -14,11 +14,10 @@ build: check_docker
 	@echo '******** building upscan-upload-proxy *********'
 	
 	sbt clean test docker:stage
-	@docker build -t artefacts.tax.service.gov.uk/upscan-upload-proxy:$(tag) ./target/docker/stage/
+	@docker build -t labs03.artefacts.tax.service.gov.uk/upscan-upload-proxy:$(tag) ./target/docker/stage/
 
 authenticate_to_artifactory:
 	@docker login --username ${ARTIFACTORY_USERNAME} --password "${ARTIFACTORY_PASSWORD}"  artefacts.tax.service.gov.uk
 
 push_image:
-	@docker push artefacts.tax.service.gov.uk/upscan-upload-proxy:$(tag)
-	@cut-release
+	@docker push labs03.artefacts.tax.service.gov.uk/upscan-upload-proxy:$(tag)
