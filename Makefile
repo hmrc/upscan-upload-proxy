@@ -1,23 +1,23 @@
 SHELL := /usr/bin/env bash
 DOCKER_OK := $(shell type -P docker)
+ARTIFACTORY_URL := "artefacts.tax.service.gov.uk"
 
 # running locally will give a SNAPSHOT version
 # in jenkins MAKE_RELEASE is true
 tag = $$(sbt version | tail -1 | sed s/'\[info\] '//)
+artefact = "upscan-upload-proxy"
 
-check_docker:
-    ifeq ('$(DOCKER_OK)','')
-	    $(error package 'docker' not found!)
-    endif
-
-build: check_docker 
-	@echo '******** building upscan-upload-proxy *********'
-	
-	sbt clean test docker:stage
-	@docker build -t labs03.artefacts.tax.service.gov.uk/upscan-upload-proxy:$(tag) ./target/docker/stage/
+build:
+	@echo "****** building upscan-upload-proxy" $(tag) "******" 
+	docker run --name docker-platops-sbt -d -i -t --rm -v .:/home/root ${ARTIFACTORY_URL}/platops-docker-sbt /bin/bash
+	docker exec -it -w /home/root docker-platops-sbt sbt clean docker:stage
+	docker build -t ${ARTIFACTORY_URL}/$(artefact):$(tag) ./target/docker/stage
+	docker stop docker-platops-sbt
 
 authenticate_to_artifactory:
-	@docker login --username ${ARTIFACTORY_USERNAME} --password "${ARTIFACTORY_PASSWORD}"  artefacts.tax.service.gov.uk
+	@docker login --username ${ARTIFACTORY_USERNAME} --password "${ARTIFACTORY_PASSWORD}" ${ARTIFACTORY_URL}
 
-push_image:
-	@docker push labs03.artefacts.tax.service.gov.uk/upscan-upload-proxy:$(tag)
+push:
+	docker push ${ARTIFACTORY_URL}/$(artefact):$(tag)
+
+
