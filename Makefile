@@ -9,8 +9,10 @@ artefact = "upscan-upload-proxy"
 
 build:
 	@echo "****** building upscan-upload-proxy" $(tag) "******" 
-	docker run --name docker-platops-sbt -d -i -t --rm -v .:/home/root ${ARTIFACTORY_URL}/platops-docker-sbt /bin/bash
-	docker exec -it -w /home/root docker-platops-sbt sbt clean docker:stage
+	docker run --name docker-platops-sbt -d -i -t --rm -v .:/root/build ${ARTIFACTORY_URL}/platops-docker-sbt /bin/bash
+	docker exec -e VERSION_FILENAME=/root/build/project/build.properties -it -w /root/build docker-platops-sbt  sbt 'inspect writeVersion'
+	docker exec -it -w /root/build docker-platops-sbt sbt clean test
+	docker exec -it -w /root/build docker-platops-sbt sbt docker:stage
 	docker build -t ${ARTIFACTORY_URL}/$(artefact):$(tag) ./target/docker/stage
 	docker stop docker-platops-sbt
 
