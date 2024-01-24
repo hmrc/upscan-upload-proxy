@@ -7,13 +7,15 @@ ARTEFACT := upscan-upload-proxy
 # in jenkins MAKE_RELEASE is true
 tag = $$(cat ${ARTEFACT}.version | tail -1 | sed s/'\[info\] '//)
 
-build:
+build: environment
 	@echo "****** building upscan-upload-proxy ******" 
 	docker run --name docker-platops-sbt -d -i -t --rm -v .:/root/build artefacts.tax.service.gov.uk/docker-platops-sbt /bin/bash
 	docker exec -w /root docker-platops-sbt cp /root/project/build.properties /root/build/project/build.properties
 	docker exec -w /root/build docker-platops-sbt sbt clean test
 	docker exec -w /root/build docker-platops-sbt sbt docker:stage
 	docker exec -w /root/build docker-platops-sbt sbt version > ${ARTEFACT}.version
+	cat ${ARTEFACT}.version
+	cat ${ARTEFACT}.version | tail -1 | sed s/'\[info\] '//
 	docker build -t ${ARTIFACTORY_HOST}/$(ARTEFACT):$(tag) ./target/docker/stage
 	docker stop docker-platops-sbt
 
@@ -24,4 +26,4 @@ push:
 	docker push ${ARTIFACTORY_HOST}/$(ARTEFACT):$(tag)
 
 environment:
-	printenv
+	git describe --tags --first-parent --abbrev=0
