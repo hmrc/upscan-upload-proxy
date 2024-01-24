@@ -17,10 +17,10 @@ build:
 	docker stop docker-platops-sbt
 
 authenticate_to_artifactory:
-	@docker login --username ${ARTIFACTORY_USERNAME} --password "${ARTIFACTORY_PASSWORD}" ${ARTIFACTORY_HOST}
+	#@docker login --username ${ARTIFACTORY_USERNAME} --password "${ARTIFACTORY_PASSWORD}" ${ARTIFACTORY_HOST}
 
 push:
-	docker push ${ARTIFACTORY_HOST}/$(ARTEFACT):$(tag)
+	#docker push ${ARTIFACTORY_HOST}/$(ARTEFACT):$(tag)
 
 environment:
 	printenv
