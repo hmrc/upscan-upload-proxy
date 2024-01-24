@@ -14,6 +14,7 @@ build: environment
 	docker exec -w /root/build docker-platops-sbt sbt clean test
 	docker exec -w /root/build docker-platops-sbt sbt docker:stage
 	docker exec -w /root/build docker-platops-sbt sbt version > ${ARTEFACT}.version
+	docker exec -w /root/build docker-platops-sbt git config --global --add safe.directory /root/build
 	docker exec -w /root/build docker-platops-sbt git describe --tags --first-parent --abbrev=0
 	cat ${ARTEFACT}.version
 	cat ${ARTEFACT}.version | tail -1 | sed s/'\[info\] '//
