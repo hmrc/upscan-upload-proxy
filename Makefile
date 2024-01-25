@@ -7,7 +7,7 @@ MAKE_RELEASE := true
 # in jenkins MAKE_RELEASE is true
 tag = $$(cat ${ARTEFACT}.version | tail -1 | sed s/'\[info\] '//)
 
-build: environment
+build:
 	@echo "****** building upscan-upload-proxy ******" 
 	docker run --name docker-platops-sbt -d -i -t --rm -v .:/root/build artefacts.tax.service.gov.uk/docker-platops-sbt /bin/bash
 	docker exec -w /root docker-platops-sbt cp /root/project/build.properties /root/build/project/build.properties
@@ -25,3 +25,4 @@ push:
 
 environment:
 	git describe --tags --first-parent --abbrev=0
+	printenv
