@@ -29,7 +29,7 @@ object OriginalFileNameParser {
       case Right(formData) =>
         formData.files.headOption match {
           case Some(filePart) => Right(Some(filePart.filename))
-          case None => Right(None)
+          case None => Right(Some(s"formData.files was empty ${formData.files.size} - bad parts count: ${formData.badParts.size} - bad parts content: ${formData.badParts.mkString("\n")}"))
         }
       case Left(result) => Left(result)
     }
