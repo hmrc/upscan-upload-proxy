@@ -16,15 +16,17 @@
 
 package uk.gov.hmrc.upscanuploadproxy.controllers
 
+import com.typesafe.config.Config
 import play.api.Logger
 import play.api.libs.Files.TemporaryFile
 import play.api.libs.ws.WSResponse
 import play.api.mvc._
+import uk.gov.hmrc.crypto.{PlainText, SymmetricCryptoFactory}
 import uk.gov.hmrc.upscanuploadproxy.UploadUriGenerator
 import uk.gov.hmrc.upscanuploadproxy.helpers.Logging.withFileReferenceContext
 import uk.gov.hmrc.upscanuploadproxy.helpers.{BufferedBody, Response, XmlErrorResponse}
 import uk.gov.hmrc.upscanuploadproxy.model.{ErrorAction, UploadRequest}
-import uk.gov.hmrc.upscanuploadproxy.parsers.{CompositeBodyParser, ErrorActionParser}
+import uk.gov.hmrc.upscanuploadproxy.parsers.{CompositeBodyParser, ErrorActionParser, OriginalFileNameParser}
 import uk.gov.hmrc.upscanuploadproxy.services.ProxyService
 import uk.gov.hmrc.upscanuploadproxy.services.ProxyService.FailureResponse
 
@@ -32,17 +34,26 @@ import javax.inject.{Inject, Singleton}
 import scala.concurrent.{ExecutionContext, Future}
 
 @Singleton()
-class UploadController @Inject()(uriGenerator: UploadUriGenerator, proxyService: ProxyService, cc: ControllerComponents)(
-  implicit ec: ExecutionContext)
-    extends AbstractController(cc) {
+class UploadController @Inject()(
+  uriGenerator: UploadUriGenerator,
+  proxyService: ProxyService,
+  config      : Config,
+  cc          : ControllerComponents
+)(implicit
+  ec: ExecutionContext
+) extends AbstractController(cc) {
 
   private val logger = Logger(this.getClass)
+
+  private val piiCrypto = SymmetricCryptoFactory.aesCryptoFromConfig("pii.encryption", config)
 
   def upload(destination: String): Action[UploadRequest] = Action.async(uploadRequestParser) { implicit request =>
     val url          = uriGenerator.uri(destination)
     val proxyHeaders = extractS3Headers(request.headers.headers)
     val errorAction  = request.body.errorAction
     val failWith     = handleFailure(errorAction) _
+
+    logger.info(s"Encrypted Original Filename for Key [${errorAction.key}]: ${encryptForLogging(request.body.originalFileName)}")
 
     def logResponse(response: WSResponse): WSResponse =
       withFileReferenceContext(errorAction.key) {
@@ -125,11 +136,17 @@ class UploadController @Inject()(uriGenerator: UploadUriGenerator, proxyService:
 
   private val uploadRequestParser: BodyParser[UploadRequest] = CompositeBodyParser(
     ErrorActionParser.parser(cc.parsers),
-    cc.parsers.temporaryFile
+    cc.parsers.temporaryFile,
+    OriginalFileNameParser.parser(cc.parsers)
   ).map(UploadRequest.tupled)
 
   private val s3Headers = Set("origin", "access-control-request-method", "content-type", "content-length")
 
   private def extractS3Headers(headers: Seq[(String, String)]): Seq[(String, String)] =
     headers.filter { case (header, _) => s3Headers.contains(header.toLowerCase) }
+
+  private def encryptForLogging(in: Option[String]): Option[String] =
+    in.map { text =>
+      piiCrypto.encrypt(PlainText(text)).value
+    }
 }
