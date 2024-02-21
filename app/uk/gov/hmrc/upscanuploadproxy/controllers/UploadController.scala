@@ -66,7 +66,7 @@ class UploadController @Inject()(
       maybeBoundary.fold(
         logger.info(s"Boundary header missing for key [${errorAction.key}]")
       ){ boundary =>
-        val encryptedFile = encryptForLogging(sanitiseFile(request.body.bufferedBody, boundary).toOption)
+        val encryptedFile = encryptForLogging(sanitiseFile(request.body.bufferedBody, boundary))
 
         logger.info(s"Unable to extract original file name for key [${errorAction.key}] - encrypted request: $encryptedFile")
       }
@@ -162,7 +162,7 @@ class UploadController @Inject()(
   private def extractS3Headers(headers: Seq[(String, String)]): Seq[(String, String)] =
     headers.filter { case (header, _) => s3Headers.contains(header.toLowerCase) }
 
-  private def encryptForLogging(in: Option[String]): Option[String] =
+  private def encryptForLogging(in: Try[String]): Try[String] =
     in.map { text =>
       piiCrypto.encrypt(PlainText(text)).value
     }
