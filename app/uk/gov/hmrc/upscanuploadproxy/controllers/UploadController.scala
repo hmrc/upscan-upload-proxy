@@ -32,6 +32,8 @@ import uk.gov.hmrc.upscanuploadproxy.services.ProxyService.FailureResponse
 
 import javax.inject.{Inject, Singleton}
 import scala.concurrent.{ExecutionContext, Future}
+import scala.io.Source
+import scala.util.{Try, Using}
 
 @Singleton()
 class UploadController @Inject()(
@@ -53,7 +55,22 @@ class UploadController @Inject()(
     val errorAction  = request.body.errorAction
     val failWith     = handleFailure(errorAction) _
 
-    logger.info(s"Encrypted Original Filename for Key [${errorAction.key}]: ${encryptForLogging(request.body.originalFileName)}")
+    // BDOG-3029 logging
+    if(request.body.originalFileName.isEmpty) {
+      val maybeBoundary = for {
+        mt         <- request.mediaType
+        (_, value) <- mt.parameters.find(_._1.equalsIgnoreCase("boundary"))
+        boundary   <- value
+      } yield boundary
+
+      maybeBoundary.fold(
+        logger.info(s"Boundary header missing for key [${errorAction.key}]")
+      ){ boundary =>
+        val encryptedFile = encryptForLogging(sanitiseFile(request.body.bufferedBody, boundary).toOption)
+
+        logger.info(s"Unable to extract original file name for key [${errorAction.key}] - encrypted request: $encryptedFile")
+      }
+    }
 
     def logResponse(response: WSResponse): WSResponse =
       withFileReferenceContext(errorAction.key) {
@@ -148,5 +165,11 @@ class UploadController @Inject()(
   private def encryptForLogging(in: Option[String]): Option[String] =
     in.map { text =>
       piiCrypto.encrypt(PlainText(text)).value
+    }
+
+  private def sanitiseFile(file: TemporaryFile, boundary: String): Try[String] =
+    Using(Source.fromFile(file.path.toFile, "UTF-8")) { source =>
+      val fileContent = source.mkString
+      fileContent.split(s"--$boundary").map(_.take(300) + "\n").mkString(s"--$boundary")
     }
 }
