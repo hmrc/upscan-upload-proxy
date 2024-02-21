@@ -30,9 +30,10 @@ import uk.gov.hmrc.upscanuploadproxy.parsers.{CompositeBodyParser, ErrorActionPa
 import uk.gov.hmrc.upscanuploadproxy.services.ProxyService
 import uk.gov.hmrc.upscanuploadproxy.services.ProxyService.FailureResponse
 
+import java.nio.file.Files
+import java.util.Base64
 import javax.inject.{Inject, Singleton}
 import scala.concurrent.{ExecutionContext, Future}
-import scala.io.Source
 import scala.util.{Try, Using}
 
 @Singleton()
@@ -57,19 +58,8 @@ class UploadController @Inject()(
 
     // BDOG-3029 logging
     if(request.body.originalFileName.isEmpty) {
-      val maybeBoundary = for {
-        mt         <- request.mediaType
-        (_, value) <- mt.parameters.find(_._1.equalsIgnoreCase("boundary"))
-        boundary   <- value
-      } yield boundary
-
-      maybeBoundary.fold(
-        logger.info(s"Boundary header missing for key [${errorAction.key}]")
-      ){ boundary =>
-        val encryptedFile = encryptForLogging(sanitiseFile(request.body.bufferedBody, boundary))
-
+        val encryptedFile = encryptForLogging(sanitiseFile(request.body.bufferedBody))
         logger.info(s"Unable to extract original file name for key [${errorAction.key}] - encrypted request: $encryptedFile")
-      }
     }
 
     def logResponse(response: WSResponse): WSResponse =
@@ -167,9 +157,15 @@ class UploadController @Inject()(
       piiCrypto.encrypt(PlainText(text)).value
     }
 
-  private def sanitiseFile(file: TemporaryFile, boundary: String): Try[String] =
-    Using(Source.fromFile(file.path.toFile, "UTF-8")) { source =>
-      val fileContent = source.mkString
-      fileContent.split(s"--$boundary").map(_.take(300) + "\n").mkString(s"--$boundary")
-    }
+  private def sanitiseFile(file: TemporaryFile): Try[String] = Try {
+    val sizeLimit = 4 * 1024
+    val bytes = new Array[Byte](sizeLimit)
+
+    val bytesRead = Using(Files.newInputStream(file.path)) { inputStream =>
+      inputStream.read(bytes)
+    }.getOrElse(0)
+
+    val bytesToEncode = if (bytesRead < sizeLimit) bytes.take(bytesRead) else bytes
+    Base64.getEncoder.encodeToString(bytesToEncode)
+  }
 }
