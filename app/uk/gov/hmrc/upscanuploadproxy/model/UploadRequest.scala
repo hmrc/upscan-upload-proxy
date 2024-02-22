@@ -19,4 +19,4 @@ package uk.gov.hmrc.upscanuploadproxy.model
 import play.api.libs.Files.TemporaryFile
 
 
-case class UploadRequest(errorAction: ErrorAction, bufferedBody: TemporaryFile, originalFileName: Option[String])
+case class UploadRequest(errorAction: ErrorAction, bufferedBody: TemporaryFile)
