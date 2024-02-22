@@ -21,20 +21,16 @@ import play.api.Logger
 import play.api.libs.Files.TemporaryFile
 import play.api.libs.ws.WSResponse
 import play.api.mvc._
-import uk.gov.hmrc.crypto.{PlainText, SymmetricCryptoFactory}
 import uk.gov.hmrc.upscanuploadproxy.UploadUriGenerator
 import uk.gov.hmrc.upscanuploadproxy.helpers.Logging.withFileReferenceContext
 import uk.gov.hmrc.upscanuploadproxy.helpers.{BufferedBody, Response, XmlErrorResponse}
 import uk.gov.hmrc.upscanuploadproxy.model.{ErrorAction, UploadRequest}
-import uk.gov.hmrc.upscanuploadproxy.parsers.{CompositeBodyParser, ErrorActionParser, OriginalFileNameParser}
+import uk.gov.hmrc.upscanuploadproxy.parsers.{CompositeBodyParser, ErrorActionParser}
 import uk.gov.hmrc.upscanuploadproxy.services.ProxyService
 import uk.gov.hmrc.upscanuploadproxy.services.ProxyService.FailureResponse
 
-import java.nio.file.Files
-import java.util.Base64
 import javax.inject.{Inject, Singleton}
 import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Try, Using}
 
 @Singleton()
 class UploadController @Inject()(
@@ -48,19 +44,11 @@ class UploadController @Inject()(
 
   private val logger = Logger(this.getClass)
 
-  private val piiCrypto = SymmetricCryptoFactory.aesCryptoFromConfig("pii.encryption", config)
-
   def upload(destination: String): Action[UploadRequest] = Action.async(uploadRequestParser) { implicit request =>
     val url          = uriGenerator.uri(destination)
     val proxyHeaders = extractS3Headers(request.headers.headers)
     val errorAction  = request.body.errorAction
     val failWith     = handleFailure(errorAction) _
-
-    // BDOG-3029 logging
-    if(request.body.originalFileName.isEmpty) {
-        val encryptedFile = encryptForLogging(sanitiseFile(request.body.bufferedBody))
-        logger.info(s"Unable to extract original file name for key [${errorAction.key}] - encrypted request: $encryptedFile")
-    }
 
     def logResponse(response: WSResponse): WSResponse =
       withFileReferenceContext(errorAction.key) {
@@ -143,29 +131,11 @@ class UploadController @Inject()(
 
   private val uploadRequestParser: BodyParser[UploadRequest] = CompositeBodyParser(
     ErrorActionParser.parser(cc.parsers),
-    cc.parsers.temporaryFile,
-    OriginalFileNameParser.parser(cc.parsers)
+    cc.parsers.temporaryFile
   ).map(UploadRequest.tupled)
 
   private val s3Headers = Set("origin", "access-control-request-method", "content-type", "content-length")
 
   private def extractS3Headers(headers: Seq[(String, String)]): Seq[(String, String)] =
     headers.filter { case (header, _) => s3Headers.contains(header.toLowerCase) }
-
-  private def encryptForLogging(in: Try[String]): Try[String] =
-    in.map { text =>
-      piiCrypto.encrypt(PlainText(text)).value
-    }
-
-  private def sanitiseFile(file: TemporaryFile): Try[String] = Try {
-    val sizeLimit = 4 * 1024
-    val bytes = new Array[Byte](sizeLimit)
-
-    val bytesRead = Using(Files.newInputStream(file.path)) { inputStream =>
-      inputStream.read(bytes)
-    }.getOrElse(0)
-
-    val bytesToEncode = if (bytesRead < sizeLimit) bytes.take(bytesRead) else bytes
-    Base64.getEncoder.encodeToString(bytesToEncode)
-  }
 }
