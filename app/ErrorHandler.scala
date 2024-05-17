@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+import org.apache.pekko.http.scaladsl.model.EntityStreamException
+
 import javax.inject._
 import play.api._
 import play.api.http.DefaultHttpErrorHandler
@@ -34,10 +36,15 @@ class ErrorHandler @Inject()(
   override protected def onDevServerError(request: RequestHeader, exception: UsefulException): Future[Result] =
     onProdServerError(request, exception)
 
-  override def onProdServerError(request: RequestHeader, exception: UsefulException): Future[Result] = {
-    logger.error("Internal server error", exception)
-    Future.successful(Response.internalServerError("Something went wrong, please try later."))
-  }
+  override def onProdServerError(request: RequestHeader, exception: UsefulException): Future[Result] =
+    exception.cause match {
+      case e :EntityStreamException if e.getMessage.contains("Entity stream truncation") =>
+        logger.warn("Caught EntityStreamException caused by an aborted upload, returning 500 Internal Server Error")
+        Future.successful(Response.internalServerError("Something went wrong, please try later."))
+      case _ =>
+        logger.error("Internal server error", exception)
+        Future.successful(Response.internalServerError("Something went wrong, please try later."))
+    }
 
   override protected def onNotFound(request: RequestHeader, message: String): Future[Result] =
     Future.successful(Response.notFound(s"Path '${request.path}' not found."))
