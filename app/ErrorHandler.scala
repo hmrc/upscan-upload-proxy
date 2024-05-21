@@ -33,18 +33,16 @@ class ErrorHandler @Inject()(
   router: Provider[Router])
     extends DefaultHttpErrorHandler(env, config, sourceMapper, router) with Logging {
 
-  override protected def onDevServerError(request: RequestHeader, exception: UsefulException): Future[Result] =
-    onProdServerError(request, exception)
-
-  override def onProdServerError(request: RequestHeader, exception: UsefulException): Future[Result] =
-    exception.cause match {
+  override def onServerError(request: RequestHeader, exception: Throwable): Future[Result] = {
+    exception match {
       case e :EntityStreamException if e.getMessage.contains("Entity stream truncation") =>
         logger.warn("Caught EntityStreamException caused by an aborted upload, returning 500 Internal Server Error")
-        Future.successful(Response.internalServerError("Something went wrong, please try later."))
       case _ =>
-        logger.error("Internal server error", exception)
-        Future.successful(Response.internalServerError("Something went wrong, please try later."))
+        logger.error(s"Internal Server Error, for (${request.method}) [${request.uri}]: ${exception.getMessage}", exception)
     }
+
+    Future.successful(Response.internalServerError("Something went wrong, please try later."))
+  }
 
   override protected def onNotFound(request: RequestHeader, message: String): Future[Result] =
     Future.successful(Response.notFound(s"Path '${request.path}' not found."))
