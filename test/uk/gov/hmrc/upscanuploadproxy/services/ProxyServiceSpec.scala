@@ -16,10 +16,11 @@
 
 package uk.gov.hmrc.upscanuploadproxy.services
 
-import org.mockito.scalatest.MockitoSugar
+import org.mockito.Mockito.when
 import org.scalatest.EitherValues
 import org.scalatest.matchers.should
 import org.scalatest.wordspec.AnyWordSpecLike
+import org.scalatestplus.mockito.MockitoSugar
 import play.api.http.Status.{BAD_REQUEST, INTERNAL_SERVER_ERROR, OK, SEE_OTHER}
 import play.api.libs.ws.WSResponse
 import uk.gov.hmrc.upscanuploadproxy.services.ProxyService.{FailureResponse, toResultEither}
