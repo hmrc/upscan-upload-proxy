@@ -21,12 +21,10 @@ import org.slf4j.MDC
 /*
  * Relies on the project being configured to use bootstrap's MDCPropagatingExecutorService
  */
-object Logging {
+object Logging:
   def withFileReferenceContext[A](fileReference: String)(f: => A): A =
-    try {
+    try
       MDC.put("file-reference", fileReference)
       f
-    } finally {
+    finally
       MDC.remove("file-reference")
-    }
-}

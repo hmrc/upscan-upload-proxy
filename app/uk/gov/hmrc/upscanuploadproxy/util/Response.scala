@@ -22,7 +22,7 @@ import play.api.mvc.Results.{BadRequest, InternalServerError, NotFound}
 import play.api.mvc.{Result, Results}
 import uk.gov.hmrc.upscanuploadproxy.model.ErrorResponse
 
-object Response {
+object Response:
 
   def badRequest(message: String): Result =
     BadRequest(Json.toJson(ErrorResponse(message))(ErrorResponse.writes))
@@ -33,14 +33,11 @@ object Response {
   def internalServerError(message: String): Result =
     InternalServerError(Json.toJson(ErrorResponse(message))(ErrorResponse.writes))
 
-  def redirect(url: String, queryParams: Seq[(String, String)]): Result = {
-    val urlBuilder = queryParams.foldLeft(new URIBuilder(url)) { (urlBuilder, param) =>
+  def redirect(url: String, queryParams: Seq[(String, String)]): Result =
+    val urlBuilder = queryParams.foldLeft(URIBuilder(url)): (urlBuilder, param) =>
       urlBuilder.addParameter(param._1, param._2)
-    }
 
     Results.SeeOther(urlBuilder.build().toASCIIString)
-  }
 
   def json(statusCode: Int, body: JsValue): Result =
     Results.Status(statusCode)(body)
-}

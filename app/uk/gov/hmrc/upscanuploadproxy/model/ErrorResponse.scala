@@ -18,9 +18,10 @@ package uk.gov.hmrc.upscanuploadproxy.model
 
 import play.api.libs.json.{OWrites, __}
 
-final case class ErrorResponse(message: String)
+case class ErrorResponse(
+  message: String
+)
 
-object ErrorResponse {
+object ErrorResponse:
   val writes: OWrites[ErrorResponse] =
     (__ \ "message").write[String].contramap(_.message)
-}

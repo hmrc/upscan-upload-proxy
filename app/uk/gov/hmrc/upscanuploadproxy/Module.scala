@@ -19,12 +19,12 @@ package uk.gov.hmrc.upscanuploadproxy
 import play.api.inject.Binding
 import play.api.{Configuration, Environment}
 
-class Module extends play.api.inject.Module {
+class Module extends play.api.inject.Module:
 
   override def bindings(environment: Environment, configuration: Configuration): Seq[Binding[_]] =
     Seq(
-      bind[UploadUriGenerator].to(new UploadUriGenerator {
-        override def uri(bucketName: String): String = s"https://$bucketName.s3.amazonaws.com"
-      })
+      bind[UploadUriGenerator].to:
+        new UploadUriGenerator:
+          override def uri(bucketName: String): String =
+            s"https://$bucketName.s3.amazonaws.com"
     )
-}

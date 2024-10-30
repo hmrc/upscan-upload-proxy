@@ -16,40 +16,37 @@
 
 package uk.gov.hmrc.upscanuploadproxy
 
+import org.apache.pekko.http.scaladsl.model.EntityStreamException
 import play.api._
 import play.api.http.DefaultHttpErrorHandler
 import play.api.mvc._
 import play.api.routing.Router
 import uk.gov.hmrc.upscanuploadproxy.util.Response
-import org.apache.pekko.http.scaladsl.model.EntityStreamException
 
 import javax.inject._
 import scala.concurrent._
 
 @Singleton
 class ErrorHandler @Inject()(
-  env: Environment,
-  config: Configuration,
+  env         : Environment,
+  config      : Configuration,
   sourceMapper: OptionalSourceMapper,
-  router: Provider[Router])
-    extends DefaultHttpErrorHandler(env, config, sourceMapper, router) with Logging {
+  router      : Provider[Router]
+) extends DefaultHttpErrorHandler(env, config, sourceMapper, router)
+     with Logging:
 
-  override def onServerError(request: RequestHeader, exception: Throwable): Future[Result] = {
-    exception match {
-      case e :EntityStreamException if e.getMessage.contains("Entity stream truncation") =>
+  override def onServerError(request: RequestHeader, exception: Throwable): Future[Result] =
+    exception match
+      case e: EntityStreamException if e.getMessage.contains("Entity stream truncation") =>
         logger.warn("Caught EntityStreamException caused by an aborted upload, returning 500 Internal Server Error")
       case _ =>
         logger.error(s"Internal Server Error, for (${request.method}) [${request.uri}]: ${exception.getMessage}", exception)
-    }
 
     Future.successful(Response.internalServerError("Something went wrong, please try later."))
-  }
 
   override protected def onNotFound(request: RequestHeader, message: String): Future[Result] =
     Future.successful(Response.notFound(s"Path '${request.path}' not found."))
 
-  override protected def onBadRequest(request: RequestHeader, message: String): Future[Result] = {
+  override protected def onBadRequest(request: RequestHeader, message: String): Future[Result] =
     logger.info(s"Rejected BadRequest - [$message] Headers: [${request.headers.toSimpleMap}]")
     Future.successful(Response.badRequest(s"Bad request: $message"))
-  }
-}
