@@ -49,5 +49,4 @@ trait AcceptanceSpec
 
     GuiceApplicationBuilder()
       .overrides(bind[UploadUriGenerator].toInstance(uploadUrlGenerator))
-      .configure("metrics.jvm" -> false)
       .build()
