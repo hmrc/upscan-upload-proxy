@@ -1,5 +1,5 @@
 /*
- * Copyright 2022 HM Revenue & Customs
+ * Copyright 2023 HM Revenue & Customs
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,13 +18,19 @@ package uk.gov.hmrc.upscanuploadproxy.util
 
 import org.slf4j.MDC
 
-/*
- * Relies on the project being configured to use bootstrap's MDCPropagatingExecutorService
- */
-object Logging:
-  def withFileReferenceContext[A](fileReference: String)(f: => A): A =
-    try
-      MDC.put("file-reference", fileReference)
-      f
-    finally
-      MDC.remove("file-reference")
+import scala.concurrent.{ExecutionContext, Future}
+
+/**
+  * Ensures the file reference is included in all subsequent logs
+  */
+object LoggingUtils:
+  def withMdc[T](mdcData: Map[String, String])(block: => Future[T])(using ExecutionContext): Future[T] =
+    val previous = Option(MDC.getCopyOfContextMap)
+    mdcData.foreach: (k, v) =>
+      MDC.put(k, v)
+
+    val f = Future.unit.flatMap(_ => block) // flatMap to ensure exceptions initialising block are handled by onComplete
+    f.onComplete: _ =>
+      MDC.clear()
+      previous.foreach(MDC.setContextMap)
+    f

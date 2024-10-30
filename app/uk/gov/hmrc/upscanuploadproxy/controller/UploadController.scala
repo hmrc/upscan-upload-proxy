@@ -16,7 +16,6 @@
 
 package uk.gov.hmrc.upscanuploadproxy.controllers
 
-import com.typesafe.config.Config
 import play.api.Logger
 import play.api.libs.Files.TemporaryFile
 import play.api.libs.ws.WSResponse
@@ -27,7 +26,7 @@ import uk.gov.hmrc.upscanuploadproxy.parser.{CompositeBodyParser, ErrorActionPar
 import uk.gov.hmrc.upscanuploadproxy.service.ProxyService
 import uk.gov.hmrc.upscanuploadproxy.service.ProxyService.FailureResponse
 import uk.gov.hmrc.upscanuploadproxy.util.{BufferedBody, Response, XmlErrorResponse}
-import uk.gov.hmrc.upscanuploadproxy.util.Logging.withFileReferenceContext
+import uk.gov.hmrc.upscanuploadproxy.util.LoggingUtils
 
 import javax.inject.{Inject, Singleton}
 import scala.concurrent.{ExecutionContext, Future}
@@ -36,7 +35,6 @@ import scala.concurrent.{ExecutionContext, Future}
 class UploadController @Inject()(
   uriGenerator: UploadUriGenerator,
   proxyService: ProxyService,
-  config      : Config,
   cc          : ControllerComponents
 )(using
   ExecutionContext
@@ -45,34 +43,33 @@ class UploadController @Inject()(
   private val logger = Logger(this.getClass)
 
   def upload(destination: String): Action[UploadRequest] =
-    Action.async(uploadRequestParser):  request =>
+    Action.async(uploadRequestParser): request =>
       val url          = uriGenerator.uri(destination)
       val proxyHeaders = extractS3Headers(request.headers.headers)
       val errorAction  = request.body.errorAction
       val failWith     = handleFailure(errorAction) _
 
       def logResponse(response: WSResponse): WSResponse =
-        withFileReferenceContext(errorAction.key):
-          logger.info(s"Upload response - Key=[${errorAction.key}] Status=[${response.status}] Body=[${response.body}] Headers=[${response.headers}]")
-          response
+        logger.info(s"Upload response - Key=[${errorAction.key}] Status=[${response.status}] Body=[${response.body}] Headers=[${response.headers}]")
+        response
 
-      BufferedBody.withTemporaryFile(request.map(_.bufferedBody), fileReference = Some(errorAction.key)):
-        _.fold(
-          err =>
-            withFileReferenceContext(errorAction.key):
-              logger.error(s"TemporaryFile Error [${err.getMessage}]", err)
-            Future.successful(failWith(FailureResponse(INTERNAL_SERVER_ERROR, XmlErrorResponse.toXmlErrorBody("Upload Error"))))
-        , body =>
-            withFileReferenceContext(errorAction.key):
+      LoggingUtils.withMdc(Map("file-reference" -> errorAction.key)):
+        BufferedBody.withTemporaryFile(request.map(_.bufferedBody), fileReference = Some(errorAction.key)):
+          _.fold(
+            err =>
+              Future.successful:
+                logger.error(s"TemporaryFile Error [${err.getMessage}]", err)
+                failWith(FailureResponse(INTERNAL_SERVER_ERROR, XmlErrorResponse.toXmlErrorBody("Upload Error")))
+          , body =>
               logger.info(s"Upload request - Key=[${errorAction.key}] Url=[$url] Headers=[$proxyHeaders]")
-            proxyService
-              .proxy(url, request.withHeaders(Headers(proxyHeaders: _*)), body, (logResponse _).andThen(ProxyService.toResultEither))
-              .map:
-                _.fold(
-                  failure => failWith(failure),
-                  success => success
-                )
-        )
+              proxyService
+                .proxy(url, request.withHeaders(Headers(proxyHeaders: _*)), body, (logResponse _).andThen(ProxyService.toResultEither))
+                .map:
+                  _.fold(
+                    failure => failWith(failure),
+                    success => success
+                  )
+          )
 
   /*
    * If the client supplied an error action redirect url, redirect passing the error details as query params.

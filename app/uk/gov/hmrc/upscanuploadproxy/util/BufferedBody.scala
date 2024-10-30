@@ -32,7 +32,7 @@ object BufferedBody:
   private val logger = Logger(this.getClass)
 
   def withTemporaryFile[A](
-    request: Request[TemporaryFile],
+    request      : Request[TemporaryFile],
     fileReference: Option[String]
   )(
     block: Try[Source[ByteString, _]] => Future[Result]
@@ -45,18 +45,16 @@ object BufferedBody:
 
     val moveFileResult = Try(request.body.atomicMoveWithFallback(outPath))
 
-    Logging.withFileReferenceContext(fileReference.getOrElse("")):
-      moveFileResult.foreach(newPath => logger.debug(s"Moved TemporaryFile$forKey from [$inPath] to [$newPath]"))
+    moveFileResult.foreach(newPath => logger.debug(s"Moved TemporaryFile$forKey from [$inPath] to [$newPath]"))
 
     val futResult = block(moveFileResult.map(FileIO.fromPath(_)))
     futResult.onComplete: _ =>
       Future:
-        Logging.withFileReferenceContext(fileReference.getOrElse("")):
-          moveFileResult.foreach: path =>
-            Try(Files.deleteIfExists(path))
-              .fold(
-                err      => logger.warn(s"Failed to delete TemporaryFile$forKey at [$path]", err),
-                didExist => if didExist then logger.debug(s"Deleted TemporaryFile$forKey at [$path]")
-              )
+        moveFileResult.foreach: path =>
+          Try(Files.deleteIfExists(path))
+            .fold(
+              err      => logger.warn(s"Failed to delete TemporaryFile$forKey at [$path]", err),
+              didExist => if didExist then logger.debug(s"Deleted TemporaryFile$forKey at [$path]")
+            )
 
     futResult
