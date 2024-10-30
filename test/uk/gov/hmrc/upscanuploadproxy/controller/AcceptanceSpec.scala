@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package uk.gov.hmrc.upscanuploadproxy.controllers
+package uk.gov.hmrc.upscanuploadproxy.controller
 
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.wordspec.AnyWordSpec
@@ -25,7 +25,7 @@ import play.api.inject.bind
 import play.api.inject.guice.GuiceApplicationBuilder
 import play.api.libs.ws.WSClient
 import uk.gov.hmrc.upscanuploadproxy.UploadUriGenerator
-import uk.gov.hmrc.upscanuploadproxy.controllers.utils.WireMockHelper
+import uk.gov.hmrc.http.test.WireMockSupport
 
 import scala.concurrent.ExecutionContextExecutor
 
@@ -34,7 +34,7 @@ trait AcceptanceSpec
     with Matchers
     with GuiceOneServerPerSuite
     with MockitoSugar
-    with WireMockHelper {
+    with WireMockSupport {
 
   implicit val ec: ExecutionContextExecutor = scala.concurrent.ExecutionContext.global
   protected val wsClient: WSClient          = fakeApplication().injector.instanceOf(classOf[WSClient])

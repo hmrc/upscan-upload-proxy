@@ -22,12 +22,12 @@ import play.api.libs.Files.TemporaryFile
 import play.api.libs.ws.WSResponse
 import play.api.mvc._
 import uk.gov.hmrc.upscanuploadproxy.UploadUriGenerator
-import uk.gov.hmrc.upscanuploadproxy.helpers.Logging.withFileReferenceContext
-import uk.gov.hmrc.upscanuploadproxy.helpers.{BufferedBody, Response, XmlErrorResponse}
 import uk.gov.hmrc.upscanuploadproxy.model.{ErrorAction, UploadRequest}
-import uk.gov.hmrc.upscanuploadproxy.parsers.{CompositeBodyParser, ErrorActionParser}
-import uk.gov.hmrc.upscanuploadproxy.services.ProxyService
-import uk.gov.hmrc.upscanuploadproxy.services.ProxyService.FailureResponse
+import uk.gov.hmrc.upscanuploadproxy.parser.{CompositeBodyParser, ErrorActionParser}
+import uk.gov.hmrc.upscanuploadproxy.service.ProxyService
+import uk.gov.hmrc.upscanuploadproxy.service.ProxyService.FailureResponse
+import uk.gov.hmrc.upscanuploadproxy.util.{BufferedBody, Response, XmlErrorResponse}
+import uk.gov.hmrc.upscanuploadproxy.util.Logging.withFileReferenceContext
 
 import javax.inject.{Inject, Singleton}
 import scala.concurrent.{ExecutionContext, Future}

@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package uk.gov.hmrc.upscanuploadproxy.parsers
+package uk.gov.hmrc.upscanuploadproxy.parser
 
 import org.apache.pekko.stream.scaladsl.Sink
 import org.apache.http.client.utils.URIBuilder
@@ -23,8 +23,8 @@ import play.api.libs.streams.Accumulator
 import play.api.mvc.MultipartFormData.FilePart
 import play.api.mvc._
 import play.core.parsers.Multipart
-import uk.gov.hmrc.upscanuploadproxy.helpers.Response
 import uk.gov.hmrc.upscanuploadproxy.model.ErrorAction
+import uk.gov.hmrc.upscanuploadproxy.util.Response
 
 import java.net.URI
 import java.nio.charset.StandardCharsets.UTF_8

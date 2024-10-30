@@ -14,15 +14,16 @@
  * limitations under the License.
  */
 
-import org.apache.pekko.http.scaladsl.model.EntityStreamException
+package uk.gov.hmrc.upscanuploadproxy
 
-import javax.inject._
 import play.api._
 import play.api.http.DefaultHttpErrorHandler
 import play.api.mvc._
 import play.api.routing.Router
-import uk.gov.hmrc.upscanuploadproxy.helpers.Response
+import uk.gov.hmrc.upscanuploadproxy.util.Response
+import org.apache.pekko.http.scaladsl.model.EntityStreamException
 
+import javax.inject._
 import scala.concurrent._
 
 @Singleton

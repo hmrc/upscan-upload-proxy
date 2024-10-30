@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package uk.gov.hmrc.upscanuploadproxy.helpers
+package uk.gov.hmrc.upscanuploadproxy.util
 
 import org.apache.http.client.utils.URIBuilder
 import play.api.libs.json.{JsValue, Json}

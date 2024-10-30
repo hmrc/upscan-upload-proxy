@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-package uk.gov.hmrc.upscanuploadproxy.parsers
-
+package uk.gov.hmrc.upscanuploadproxy.parser
 
 import org.apache.pekko.stream.SinkShape
 import org.apache.pekko.stream.scaladsl.GraphDSL.Implicits._

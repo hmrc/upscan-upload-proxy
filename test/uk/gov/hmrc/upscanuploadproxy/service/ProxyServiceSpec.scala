@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package uk.gov.hmrc.upscanuploadproxy.services
+package uk.gov.hmrc.upscanuploadproxy.service
 
 import org.mockito.Mockito.when
 import org.scalatest.EitherValues
@@ -23,10 +23,9 @@ import org.scalatest.wordspec.AnyWordSpecLike
 import org.scalatestplus.mockito.MockitoSugar
 import play.api.http.Status.{BAD_REQUEST, INTERNAL_SERVER_ERROR, OK, SEE_OTHER}
 import play.api.libs.ws.WSResponse
-import uk.gov.hmrc.upscanuploadproxy.services.ProxyService.{FailureResponse, toResultEither}
 
 class ProxyServiceSpec extends AnyWordSpecLike with should.Matchers with MockitoSugar with EitherValues {
-
+  import ProxyService.{FailureResponse, toResultEither}
   import ProxyServiceSpec._
 
   private trait Fixture {

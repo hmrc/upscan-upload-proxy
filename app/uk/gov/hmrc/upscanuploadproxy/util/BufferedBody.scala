@@ -14,14 +14,13 @@
  * limitations under the License.
  */
 
-package uk.gov.hmrc.upscanuploadproxy.helpers
+package uk.gov.hmrc.upscanuploadproxy.util
 
 import org.apache.pekko.stream.scaladsl.{FileIO, Source}
 import org.apache.pekko.util.ByteString
 import play.api.Logger
 import play.api.libs.Files.TemporaryFile
 import play.api.mvc._
-import uk.gov.hmrc.upscanuploadproxy.helpers.Logging.withFileReferenceContext
 
 import java.nio.file.Files
 import scala.concurrent.{ExecutionContext, Future}
@@ -40,14 +39,14 @@ object BufferedBody {
     val outPath = inPath.resolveSibling(inPath.getFileName.toString + AdoptedFileSuffix)
 
     val moveFileResult = Try(request.body.atomicMoveWithFallback(outPath))
-    withFileReferenceContext(fileReference.getOrElse("")) {
+    Logging.withFileReferenceContext(fileReference.getOrElse("")) {
       moveFileResult.foreach(newPath => logger.debug(s"Moved TemporaryFile$forKey from [$inPath] to [$newPath]"))
     }
 
     val futResult = block(moveFileResult.map(FileIO.fromPath(_)))
     futResult.onComplete { _ =>
       Future {
-        withFileReferenceContext(fileReference.getOrElse("")) {
+        Logging.withFileReferenceContext(fileReference.getOrElse("")) {
           moveFileResult.foreach { path =>
             Try(Files.deleteIfExists(path)).fold(
               err => logger.warn(s"Failed to delete TemporaryFile$forKey at [$path]", err),

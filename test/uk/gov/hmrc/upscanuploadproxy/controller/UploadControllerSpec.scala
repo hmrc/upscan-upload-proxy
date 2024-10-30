@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package uk.gov.hmrc.upscanuploadproxy.controllers
+package uk.gov.hmrc.upscanuploadproxy.controller
 
 import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder
 import com.github.tomakehurst.wiremock.client.WireMock._
@@ -32,7 +32,7 @@ import play.api.libs.ws.WSBodyReadables.readableAsString
 import play.api.test.Helpers.TRANSFER_ENCODING
 import play.mvc.Http.HeaderNames.{CONTENT_LENGTH, CONTENT_TYPE, ETAG, LOCATION}
 import play.mvc.Http.MimeTypes.{JSON, XML}
-import uk.gov.hmrc.upscanuploadproxy.controllers.UrlHelper.-/
+import uk.gov.hmrc.upscanuploadproxy.controller.UrlHelper.-/
 
 import scala.io.Source
 import scala.jdk.CollectionConverters._

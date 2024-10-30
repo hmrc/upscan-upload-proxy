@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-package uk.gov.hmrc.upscanuploadproxy.helpers
+package uk.gov.hmrc.upscanuploadproxy.util
 
 import org.scalatest.matchers.should
 import org.scalatest.wordspec.AnyWordSpecLike
 import play.api.libs.json.Json
-import uk.gov.hmrc.upscanuploadproxy.helpers.XmlErrorResponse.{toFields, toJson, toXmlErrorBody}
 
 class XmlErrorResponseSpec extends AnyWordSpecLike with should.Matchers {
+  import XmlErrorResponse.{toFields, toJson, toXmlErrorBody}
 
   "An XML error message" should {
 

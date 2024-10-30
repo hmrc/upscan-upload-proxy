@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package uk.gov.hmrc.upscanuploadproxy.services
+package uk.gov.hmrc.upscanuploadproxy.service
 
 import org.apache.pekko.stream.scaladsl.Source
 import org.apache.pekko.util.ByteString
