@@ -16,6 +16,5 @@
 
 package uk.gov.hmrc.upscanuploadproxy
 
-trait UploadUriGenerator {
+trait UploadUriGenerator:
   def uri(bucketName: String): String
-}

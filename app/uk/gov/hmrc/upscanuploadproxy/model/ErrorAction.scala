@@ -16,4 +16,7 @@
 
 package uk.gov.hmrc.upscanuploadproxy.model
 
-case class ErrorAction(redirectUrl: Option[String], key: String)
+case class ErrorAction(
+  redirectUrl: Option[String],
+  key        : String
+)

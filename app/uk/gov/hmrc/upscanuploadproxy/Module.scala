@@ -14,19 +14,17 @@
  * limitations under the License.
  */
 
-package uk.gov.hmrc.upscanuploadproxy.helpers
+package uk.gov.hmrc.upscanuploadproxy
 
-import org.slf4j.MDC
+import play.api.inject.Binding
+import play.api.{Configuration, Environment}
 
-/*
- * Relies on the project being configured to use bootstrap's MDCPropagatingExecutorService
- */
-object Logging {
-  def withFileReferenceContext[A](fileReference: String)(f: => A): A =
-    try {
-      MDC.put("file-reference", fileReference)
-      f
-    } finally {
-      MDC.remove("file-reference")
-    }
-}
+class Module extends play.api.inject.Module:
+
+  override def bindings(environment: Environment, configuration: Configuration): Seq[Binding[_]] =
+    Seq(
+      bind[UploadUriGenerator].to:
+        new UploadUriGenerator:
+          override def uri(bucketName: String): String =
+            s"https://$bucketName.s3.amazonaws.com"
+    )

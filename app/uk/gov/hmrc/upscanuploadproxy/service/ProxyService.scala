@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-package uk.gov.hmrc.upscanuploadproxy.services
+package uk.gov.hmrc.upscanuploadproxy.service
 
 import org.apache.pekko.stream.scaladsl.Source
 import org.apache.pekko.util.ByteString
 import com.google.inject.Singleton
 import play.api.http.Status
-import play.api.libs.ws.{WSClient, WSResponse}
+import play.api.libs.ws.{WSClient, WSResponse, writableOf_Source}
 import play.api.mvc.{Request, Result, Results}
 
 import javax.inject.Inject
@@ -28,13 +28,14 @@ import scala.concurrent.duration.Duration
 import scala.concurrent.{ExecutionContext, Future}
 
 @Singleton
-class ProxyService @Inject()(wsClient: WSClient)(implicit ec: ExecutionContext) {
+class ProxyService @Inject()(wsClient: WSClient)(using ExecutionContext):
 
   def proxy[T](
-    url: String,
-    request: Request[_],
-    source: Source[ByteString, _],
-    processResponse: WSResponse => T): Future[T] = {
+    url            : String,
+    request        : Request[_],
+    source         : Source[ByteString, _],
+    processResponse: WSResponse => T
+  ): Future[T] =
 
     wsClient
       .url(url)
@@ -46,8 +47,6 @@ class ProxyService @Inject()(wsClient: WSClient)(implicit ec: ExecutionContext) 
       .withBody(source)
       .execute(request.method)
       .map(processResponse)
-  }
-}
 
 /*
  * An AWS Success response has no body (it will be either a 204 or 303) and so any response headers can be safely
@@ -55,27 +54,33 @@ class ProxyService @Inject()(wsClient: WSClient)(implicit ec: ExecutionContext) 
  * as we proxy the response.  Consequently, we cannot simply forward all response headers in the Error case.  Instead,
  * we implement an 'allow list' here, and only forward CORS-related headers or custom Amazon headers.
  */
-object ProxyService {
+object ProxyService:
 
   type SuccessResponse = Result
-  case class FailureResponse(statusCode: Int, body: String, headers: Seq[(String, String)] = Seq.empty)
+
+  case class FailureResponse(
+    statusCode: Int,
+    body      : String,
+    headers   : Seq[(String, String)] = Seq.empty
+  )
 
   def toResultEither(response: WSResponse): Either[FailureResponse, SuccessResponse] =
     Either.cond(
       Status.isSuccessful(response.status) || Status.isRedirect(response.status),
       toResult(response),
-      toFailureResponse(response))
+      toFailureResponse(response)
+    )
 
   def toResult(response: WSResponse): Result =
-    Results.Status(response.status)(response.body).withHeaders(headersFrom(response): _*)
+    Results.Status(response.status)(response.body)
+      .withHeaders(headersFrom(response): _*)
 
-  private def toFailureResponse(response: WSResponse): FailureResponse = {
-    val exposableHeaders = headersFrom(response).filter { case (name, _) => isCorsResponseHeader(name) || isAmazonHeader(name) }
+  private def toFailureResponse(response: WSResponse): FailureResponse =
+    val exposableHeaders = headersFrom(response).filter((name, _) => isCorsResponseHeader(name) || isAmazonHeader(name))
     FailureResponse(response.status, response.body, exposableHeaders)
-  }
 
   private def headersFrom(response: WSResponse): Seq[(String, String)] =
-    response.headers.toSeq.flatMap { case (h, v) => v.map((h, _)) }
+    response.headers.toSeq.flatMap((h, v) => v.map((h, _)))
 
   // CORS response headers are defined at: https://fetch.spec.whatwg.org/#http-responses
   private def isCorsResponseHeader(name: String): Boolean =
@@ -83,4 +88,3 @@ object ProxyService {
 
   private def isAmazonHeader(name: String): Boolean =
     name.toLowerCase.startsWith("x-amz-")
-}

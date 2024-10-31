@@ -14,14 +14,14 @@
  * limitations under the License.
  */
 
-package uk.gov.hmrc.upscanuploadproxy.helpers
+package uk.gov.hmrc.upscanuploadproxy.util
 
 import play.api.libs.json.{JsValue, Json}
 
 import scala.util.Try
 import scala.xml.Elem
 
-object XmlErrorResponse {
+object XmlErrorResponse:
 
   private val KeyName = "key"
   private val MessageField = "Message"
@@ -36,15 +36,17 @@ object XmlErrorResponse {
     (KeyName -> key) +: xmlFields(xmlErrorBody)
 
   private def xmlFields(xmlErrorBody: String): Seq[(String, String)] =
-    Try(scala.xml.XML.loadString(xmlErrorBody)).toOption.toList.flatMap { xml =>
-      val requestId = makeOptionalField("RequestId", xml)
-      val resource  = makeOptionalField("Resource", xml)
-      val message   = makeOptionalField(MessageField, xml)
-      val code      = makeOptionalField("Code", xml)
+    Try(scala.xml.XML.loadString(xmlErrorBody))
+      .toOption.toList
+      .flatMap: xml =>
+        val requestId = makeOptionalField("RequestId" , xml)
+        val resource  = makeOptionalField("Resource"  , xml)
+        val message   = makeOptionalField(MessageField, xml)
+        val code      = makeOptionalField("Code"      , xml)
 
-      Seq(code, message, resource, requestId).flatten
-    }
+        Seq(code, message, resource, requestId).flatten
 
   private def makeOptionalField(elemType: String, xml: Elem): Option[(String, String)] =
-    (xml \ elemType).headOption.map(node => s"error$elemType" -> node.text)
-}
+    (xml \ elemType)
+      .headOption
+      .map(node => s"error$elemType" -> node.text)

@@ -14,50 +14,47 @@
  * limitations under the License.
  */
 
-package uk.gov.hmrc.upscanuploadproxy.helpers
+package uk.gov.hmrc.upscanuploadproxy.util
 
 import org.apache.pekko.stream.scaladsl.{FileIO, Source}
 import org.apache.pekko.util.ByteString
 import play.api.Logger
 import play.api.libs.Files.TemporaryFile
 import play.api.mvc._
-import uk.gov.hmrc.upscanuploadproxy.helpers.Logging.withFileReferenceContext
 
 import java.nio.file.Files
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 
-object BufferedBody {
+object BufferedBody:
   private val AdoptedFileSuffix = ".out"
 
   private val logger = Logger(this.getClass)
 
-  def withTemporaryFile[A](request: Request[TemporaryFile], fileReference: Option[String])
-                          (block: Try[Source[ByteString, _]] => Future[Result])
-                          (implicit ec: ExecutionContext): Future[Result] = {
-    val forKey = fileReference.map(key => s" for Key [$key]").getOrElse("")
-    val inPath = request.body.path
+  def withTemporaryFile[A](
+    request      : Request[TemporaryFile],
+    fileReference: Option[String]
+  )(
+    block: Try[Source[ByteString, _]] => Future[Result]
+  )(using
+    ExecutionContext
+  ): Future[Result] =
+    val forKey  = fileReference.fold("")(key => s" for Key [$key]")
+    val inPath  = request.body.path
     val outPath = inPath.resolveSibling(inPath.getFileName.toString + AdoptedFileSuffix)
 
     val moveFileResult = Try(request.body.atomicMoveWithFallback(outPath))
-    withFileReferenceContext(fileReference.getOrElse("")) {
-      moveFileResult.foreach(newPath => logger.debug(s"Moved TemporaryFile$forKey from [$inPath] to [$newPath]"))
-    }
+
+    moveFileResult.foreach(newPath => logger.debug(s"Moved TemporaryFile$forKey from [$inPath] to [$newPath]"))
 
     val futResult = block(moveFileResult.map(FileIO.fromPath(_)))
-    futResult.onComplete { _ =>
-      Future {
-        withFileReferenceContext(fileReference.getOrElse("")) {
-          moveFileResult.foreach { path =>
-            Try(Files.deleteIfExists(path)).fold(
-              err => logger.warn(s"Failed to delete TemporaryFile$forKey at [$path]", err),
-              didExist => if (didExist) logger.debug(s"Deleted TemporaryFile$forKey at [$path]")
+    futResult.onComplete: _ =>
+      Future:
+        moveFileResult.foreach: path =>
+          Try(Files.deleteIfExists(path))
+            .fold(
+              err      => logger.warn(s"Failed to delete TemporaryFile$forKey at [$path]", err),
+              didExist => if didExist then logger.debug(s"Deleted TemporaryFile$forKey at [$path]")
             )
-          }
-        }
-      }
-    }
 
     futResult
-  }
-}
