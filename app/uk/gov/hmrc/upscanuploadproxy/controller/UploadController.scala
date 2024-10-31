@@ -63,11 +63,20 @@ class UploadController @Inject()(
           , body =>
               logger.info(s"Upload request - Key=[${errorAction.key}] Url=[$url] Headers=[$proxyHeaders]")
               proxyService
-                .proxy(url, request.withHeaders(Headers(proxyHeaders: _*)), body, (logResponse _).andThen(ProxyService.toResultEither))
+                .proxy(
+                  url,
+                  request.withHeaders(Headers(proxyHeaders: _*)),
+                  body,
+                  (logResponse _).andThen(ProxyService.toResultEither)
+                )
                 .map:
                   _.fold(
-                    failure => failWith(failure),
-                    success => success
+                    failure =>
+                      logger.warn(s"Failed with $failure")
+                      failWith(failure),
+                    success =>
+                      logger.info(s"Succeeded with $success")
+                      success
                   )
           )
 
