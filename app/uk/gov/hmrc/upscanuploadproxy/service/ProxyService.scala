@@ -22,6 +22,7 @@ import com.google.inject.Singleton
 import play.api.http.Status
 import play.api.libs.ws.{WSClient, WSResponse, writableOf_Source}
 import play.api.mvc.{Request, Result, Results}
+import uk.gov.hmrc.play.http.logging.Mdc
 
 import javax.inject.Inject
 import scala.concurrent.duration.Duration
@@ -36,17 +37,17 @@ class ProxyService @Inject()(wsClient: WSClient)(using ExecutionContext):
     source         : Source[ByteString, _],
     processResponse: WSResponse => T
   ): Future[T] =
-
-    wsClient
-      .url(url)
-      .withFollowRedirects(false)
-      .withMethod(request.method)
-      .withHttpHeaders(request.headers.headers: _*)
-      .withQueryStringParameters(request.queryString.view.mapValues(_.head).toSeq: _*)
-      .withRequestTimeout(Duration.Inf)
-      .withBody(source)
-      .execute(request.method)
-      .map(processResponse)
+    Mdc.preservingMdc:
+      wsClient
+        .url(url)
+        .withFollowRedirects(false)
+        .withMethod(request.method)
+        .withHttpHeaders(request.headers.headers: _*)
+        .withQueryStringParameters(request.queryString.view.mapValues(_.head).toSeq: _*)
+        .withRequestTimeout(Duration.Inf)
+        .withBody(source)
+        .execute(request.method)
+        .map(processResponse)
 
 /*
  * An AWS Success response has no body (it will be either a 204 or 303) and so any response headers can be safely

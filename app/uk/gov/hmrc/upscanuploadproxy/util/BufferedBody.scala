@@ -49,12 +49,11 @@ object BufferedBody:
 
     val futResult = block(moveFileResult.map(FileIO.fromPath(_)))
     futResult.onComplete: _ =>
-      Future:
-        moveFileResult.foreach: path =>
-          Try(Files.deleteIfExists(path))
-            .fold(
-              err      => logger.warn(s"Failed to delete TemporaryFile$forKey at [$path]", err),
-              didExist => if didExist then logger.debug(s"Deleted TemporaryFile$forKey at [$path]")
-            )
+      moveFileResult.foreach: path =>
+        Try(Files.deleteIfExists(path))
+          .fold(
+            err      => logger.warn(s"Failed to delete TemporaryFile$forKey at [$path]", err),
+            didExist => if didExist then logger.debug(s"Deleted TemporaryFile$forKey at [$path]")
+          )
 
     futResult
