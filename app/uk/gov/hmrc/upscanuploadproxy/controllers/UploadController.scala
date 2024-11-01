@@ -132,7 +132,7 @@ class UploadController @Inject()(
   private val uploadRequestParser: BodyParser[UploadRequest] = CompositeBodyParser(
     ErrorActionParser.parser(cc.parsers),
     cc.parsers.temporaryFile
-  ).map(UploadRequest.tupled)
+  ).map(UploadRequest.apply)
 
   private val s3Headers = Set("origin", "access-control-request-method", "content-type", "content-length")
 
