@@ -74,7 +74,11 @@ object ProxyService:
 
   def toResult(response: WSResponse): Result =
     Results.Status(response.status)(response.body)
-      .withHeaders(headersFrom(response): _*)
+      .withHeaders(
+        headersFrom(response)
+          .filterNot(_._1.toLowerCase == "content-length") // would only raise a warning (and be ignored, since is set by body writeable)
+          : _*
+      )
 
   private def toFailureResponse(response: WSResponse): FailureResponse =
     val exposableHeaders = headersFrom(response).filter((name, _) => isCorsResponseHeader(name) || isAmazonHeader(name))
