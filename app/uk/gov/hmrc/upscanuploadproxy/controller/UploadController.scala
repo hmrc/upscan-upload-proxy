@@ -28,8 +28,10 @@ import uk.gov.hmrc.upscanuploadproxy.service.ProxyService.FailureResponse
 import uk.gov.hmrc.upscanuploadproxy.util.{BufferedBody, Response, XmlErrorResponse}
 import uk.gov.hmrc.upscanuploadproxy.util.LoggingUtils
 
+import java.util.UUID
 import javax.inject.{Inject, Singleton}
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.Try
 
 @Singleton()
 class UploadController @Inject()(
@@ -71,8 +73,12 @@ class UploadController @Inject()(
                 )
                 .map:
                   _.fold(
-                    failure => failWith(failure),
-                    success => success
+                    failure =>
+                      logger.warn(
+                        s"Upload failed - reference: [${referenceForLog(errorAction.key)}] Status=[${failure.statusCode}] Reason=[${reasonForLog(failure.body)}]"
+                      )
+                      failWith(failure)
+                  , success => success
                   )
           )
 
@@ -132,6 +138,14 @@ class UploadController @Inject()(
       ErrorActionParser.parser(cc.parsers),
       cc.parsers.temporaryFile
     ).map(UploadRequest.apply)
+
+  private def referenceForLog(reference: String): String =
+    Try(UUID.fromString(reference))
+      .toOption
+      .fold("Unrecognised Reference in ErrorAction.key")(_ => reference)
+
+  private def reasonForLog(reason: String): String =
+    reason.replaceAll("\\s+", " ").take(500)
 
   private val s3Headers = Set("origin", "access-control-request-method", "content-type", "content-length")
 
