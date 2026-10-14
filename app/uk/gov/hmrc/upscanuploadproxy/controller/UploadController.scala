@@ -74,7 +74,7 @@ class UploadController @Inject()(
                 .map:
                   _.fold(
                     failure =>
-                      logger.warn(
+                      logger.error(
                         s"Upload failed - reference: [${referenceForLog(errorAction.key)}] Status=[${failure.statusCode}] Reason=[${reasonForLog(failure.body)}]"
                       )
                       failWith(failure)
