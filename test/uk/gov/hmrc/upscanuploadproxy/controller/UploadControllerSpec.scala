@@ -222,6 +222,24 @@ class UploadControllerSpec
       response.contentType      shouldBe JSON
       Json.parse(response.body) shouldBe fullAwsErrorAsJson
 
+    "handle an unrecognised reference without exposing its value" in:
+      val invalidReference = "john.smith@example.com"
+      val requestBody =
+        readResource("/request-no-action-redirects")
+          .replace("b198de49-e7b5-49a8-83ff-068fc9357481", invalidReference)
+      val expectedMultipartFormData =
+        RequestMultipartFormDataExcludingRedirects.updated(
+          2,
+          aMultipart("key").withBody(equalTo(invalidReference))
+        )
+      val s3Response =
+        aResponse()
+          .withStatus(BAD_REQUEST)
+          .withBody("<Error><Message>Unexpected field csrfToken</Message></Error>")
+      stubS3ForPost(expectedMultipartFormData, willReturn = s3Response)
+
+      makeUploadRequest(withBody = requestBody).status shouldBe BAD_REQUEST
+
     "proxy status code with error translation on S3 AccessDenied error_action_redirect policy condition failed" in:
       val fullAwsErrorAsJson =
         Json.parse:
