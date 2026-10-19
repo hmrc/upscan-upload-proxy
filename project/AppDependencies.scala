@@ -3,12 +3,12 @@ import sbt._
 
 object AppDependencies {
 
-  val bootstrapVersion = "9.5.0"
+  val bootstrapVersion = "10.1.0"
 
   val compile = Seq(
     ws,
     "uk.gov.hmrc"               %% "bootstrap-backend-play-30"  % bootstrapVersion,
-    "org.apache.httpcomponents" %  "httpclient"                 % "4.5.13"
+    "org.apache.httpcomponents" %  "httpclient"                 % "4.5.14"
   )
 
   val test = Seq(

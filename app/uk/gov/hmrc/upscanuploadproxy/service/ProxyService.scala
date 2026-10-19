@@ -22,7 +22,7 @@ import com.google.inject.Singleton
 import play.api.http.Status
 import play.api.libs.ws.{WSClient, WSResponse, writableOf_Source}
 import play.api.mvc.{Request, Result, Results}
-import uk.gov.hmrc.play.http.logging.Mdc
+import uk.gov.hmrc.mdc.Mdc
 
 import javax.inject.Inject
 import scala.concurrent.duration.Duration
